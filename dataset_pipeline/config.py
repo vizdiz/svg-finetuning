@@ -16,3 +16,32 @@ Settings include:
   - Captioner: prompt template, min/max caption length, cache behaviour
   - Pipeline: batch ID prefix, parallelism (thread pool size)
 """
+
+import os
+from dataclasses import dataclass, field
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
+
+@dataclass
+class PipelineConfig:
+    anthropic_api_key: str = field(default_factory=lambda: os.environ["ANTHROPIC_API_KEY"])
+    aws_profile: str = field(default_factory=lambda: os.environ["AWS_PROFILE"])
+    s3_data_bucket: str = field(default_factory=lambda: os.environ["S3_DATA_BUCKET"])
+    s3_scripts_bucket: str = field(default_factory=lambda: os.environ["S3_SCRIPTS_BUCKET"])
+    region: str = field(default_factory=lambda: os.environ["REGION"])
+    raw_prefix: str = "raw/"
+    processed_prefix: str = "processed/"
+    train_prefix: str = "train/"
+    val_prefix: str = "val/"
+
+
+@dataclass
+class ScrapeConfig:
+    max_svgs_per_source: int = 1000
+    min_svg_bytes: int = 500
+    max_svg_bytes: int = 500_000
+    val_split: float = 0.1
+    min_svg_elements: int = 5
