@@ -10,3 +10,5 @@ build/
 .DS_Store
 .env
 *.zip
+pipeline_output/
+.cache/

@@ -13,25 +13,23 @@ import os
 import boto3
 from datetime import datetime, timezone
 
-ACCOUNT_ID    = os.environ["ACCOUNT_ID"]
-REGION        = os.environ.get("AWS_REGION", "us-east-1")
-DATA_BUCKET   = f"svg-finetuning-data-{ACCOUNT_ID}"
-MODELS_BUCKET = f"svg-finetuning-models-{ACCOUNT_ID}"
-SM_ROLE       = f"arn:aws:iam::{ACCOUNT_ID}:role/SVGFinetuneSageMakerRole"
-ENDPOINT_NAME = "svg-finetuning-inference"
-SCRIPTS_URI   = f"s3://svg-finetuning-scripts-{ACCOUNT_ID}/training/"
-
-TRAINING_IMAGE = (
+REGION = os.environ.get("AWS_REGION", os.environ.get("REGION", "us-east-1"))
+ACCOUNT_ID = os.environ.get("ACCOUNT_ID", "")
+DATA_BUCKET = os.environ.get("DATA_BUCKET", f"svg-finetuning-data-{ACCOUNT_ID}" if ACCOUNT_ID else "")
+MODELS_BUCKET = os.environ.get("MODELS_BUCKET", f"svg-finetuning-models-{ACCOUNT_ID}" if ACCOUNT_ID else "")
+SM_ROLE = os.environ.get("SM_ROLE", f"arn:aws:iam::{ACCOUNT_ID}:role/SVGFinetuneSageMakerRole" if ACCOUNT_ID else "")
+ENDPOINT_NAME = os.environ.get("ENDPOINT_NAME", "svg-finetuning-inference")
+SCRIPTS_URI = os.environ.get("SCRIPTS_URI", f"s3://svg-finetuning-scripts-{ACCOUNT_ID}/training/" if ACCOUNT_ID else "")
+TRAINING_IMAGE = os.environ.get(
+    "TRAINING_IMAGE",
     "763104351884.dkr.ecr.us-east-1.amazonaws.com/"
-    "huggingface-pytorch-training:2.8.0-transformers4.56.2-gpu-py312-cu129-ubuntu22.04"
+    "huggingface-pytorch-training:2.8.0-transformers4.56.2-gpu-py312-cu129-ubuntu22.04",
 )
-
 
 def get_hf_token() -> str:
     secrets = boto3.client("secretsmanager", region_name=REGION)
-    return secrets.get_secret_value(
-        SecretId="svg-finetuning/huggingface-token"
-    )["SecretString"]
+    secret_id = os.environ.get("HF_SECRET_ID", "svg-finetuning/huggingface-token")
+    return secrets.get_secret_value(SecretId=secret_id)["SecretString"]
 
 
 def validate_manifest(bucket: str) -> dict:
@@ -57,6 +55,9 @@ def validate_manifest(bucket: str) -> dict:
 
 
 def handler(event, context):
+    if not DATA_BUCKET or not MODELS_BUCKET or not SM_ROLE or not SCRIPTS_URI:
+        raise RuntimeError("Lambda env is missing DATA_BUCKET, MODELS_BUCKET, SM_ROLE, or SCRIPTS_URI")
+
     sm = boto3.client("sagemaker", region_name=REGION)
 
     # Validate manifest regardless of trigger source
@@ -112,6 +113,7 @@ def handler(event, context):
             "HF_TOKEN":               hf_token,
             "HUGGING_FACE_HUB_TOKEN": hf_token,
             "TRANSFORMERS_CACHE":     "/opt/ml/model/.cache",
+            "AWS_REGION":             REGION,
         },
     )
 
