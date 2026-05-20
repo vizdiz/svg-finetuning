@@ -10,5 +10,9 @@ build/
 .DS_Store
 .env
 *.zip
+node_modules/
+infra/terraform/.terraform/
+infra/terraform/terraform.tfstate
+infra/terraform/terraform.tfstate.backup
 pipeline_output/
 .cache/
