@@ -1,0 +1,306 @@
+:root {
+  --bg: #f0efeb;
+  --surface: #e8e7e2;
+  --surface-deep: #e2e1dc;
+  --ink: #1a1a18;
+  --ink-muted: #2f2f2a;
+  --ink-faint: #b6b3a8;
+  --rule: #d0cfc8;
+  --gold: #f59e0b;
+  --gold-hover: #d97706;
+  --gold-text: #451a03;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "IBM Plex Mono", monospace;
+}
+
+button,
+textarea {
+  font: inherit;
+}
+
+.page {
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+.shell {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 2rem 2rem 2rem;
+}
+
+.hero {
+  max-width: 860px;
+  margin-bottom: 1.2rem;
+}
+
+h1 {
+  margin: 0;
+  font-size: 56px;
+  line-height: 1.05;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.lede {
+  margin: 0.45rem 0 0;
+  font-size: 18px;
+  line-height: 1.5;
+  font-weight: 400;
+  font-style: italic;
+  color: var(--ink);
+}
+
+.preview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+.panel {
+  min-height: 560px;
+  border: 1px solid var(--rule);
+  padding: 1.5rem 1.3rem 1.2rem;
+  background: transparent;
+}
+
+.panel-eyebrow {
+  margin: 0 0 1.4rem;
+  font-size: 11px;
+  line-height: 1.4;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--ink-faint);
+}
+
+.panel h2 {
+  margin: 0;
+  font-size: 30px;
+  line-height: 1.1;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.panel-desc {
+  margin: 0.3rem 0 1rem;
+  font-size: 16px;
+  line-height: 1.6;
+  font-style: italic;
+  color: var(--ink-muted);
+}
+
+.prompt-box,
+.feedback-box {
+  background: var(--surface);
+  min-height: 120px;
+  padding: 0.9rem 0.9rem 1rem;
+  margin-bottom: 0.65rem;
+}
+
+.input-box {
+  width: 100%;
+  display: block;
+  border: 0;
+  outline: 0;
+  background: var(--surface);
+  color: var(--ink);
+  padding: 0.85rem 0.9rem 0.9rem;
+  resize: none;
+  line-height: 1.6;
+  font-size: 12px;
+}
+
+.prompt-box p,
+.feedback-box p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.prompt-box p {
+  color: var(--ink-faint);
+  font-style: italic;
+}
+
+.feedback-box p {
+  color: var(--ink-muted);
+}
+
+.prompt-input {
+  min-height: 120px;
+  margin-bottom: 0.65rem;
+}
+
+.feedback-input {
+  min-height: 92px;
+  margin-bottom: 0.65rem;
+}
+
+.input-box::placeholder {
+  color: var(--ink-faint);
+  font-style: italic;
+}
+
+.input-box:focus {
+  background: var(--surface-deep);
+  outline: 1px solid var(--gold);
+  outline-offset: 0;
+}
+
+.svg-frame {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  margin-bottom: 0.85rem;
+}
+
+.svg-render {
+  width: 100%;
+  height: 100%;
+}
+
+.svg-render svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.gold-button {
+  border: 0;
+  background: var(--gold);
+  color: var(--gold-text);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  padding: 0.75rem 0.9rem;
+  cursor: pointer;
+}
+
+.gold-button:hover {
+  background: var(--gold-hover);
+}
+
+.static-chip,
+.static-link {
+  pointer-events: none;
+  cursor: default;
+}
+
+.gold-button:disabled,
+.link-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.hint,
+.link-button {
+  font-size: 10px;
+  line-height: 1.5;
+  font-weight: 400;
+}
+
+.field-label {
+  font-size: 14px;
+  line-height: 1.4;
+  font-weight: 400;
+}
+
+.unlock-label {
+  font-size: 14px;
+  line-height: 1.4;
+  font-weight: 400;
+}
+
+.hint {
+  margin: 0.7rem 0 0;
+  color: var(--ink-muted);
+  font-style: italic;
+}
+
+.field-label {
+  display: block;
+  margin: 0 0 0.35rem;
+  color: var(--ink-muted);
+}
+
+.rating-row {
+  display: flex;
+  gap: 0.45rem;
+  margin-bottom: 0.9rem;
+  font-size: 16px;
+  color: var(--gold);
+}
+
+.star-button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  font-size: 16px;
+  color: var(--rule);
+  cursor: pointer;
+}
+
+.star-button.active {
+  color: var(--gold);
+}
+
+.star-button:hover {
+  color: var(--gold-hover);
+}
+
+.button-row {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.link-button {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--ink-faint);
+  cursor: pointer;
+}
+
+.link-button:hover {
+  color: var(--ink-muted);
+}
+
+.placeholder-copy {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ink-faint);
+  font-style: italic;
+}
+
+@media (max-width: 1200px) {
+  .preview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .panel {
+    min-height: 0;
+  }
+}
