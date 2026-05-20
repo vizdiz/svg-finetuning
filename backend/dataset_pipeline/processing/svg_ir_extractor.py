@@ -119,6 +119,8 @@ def normalize_svg(svg: str) -> CanonicalSVG:
 
 
 def _element_bbox(elem: etree._Element) -> tuple[float, float, float, float] | None:
+    if not isinstance(elem.tag, str):
+        return None
     tag = etree.QName(elem).localname
     if tag == "rect":
         x = _float(elem.get("x"), 0.0) or 0.0
@@ -155,6 +157,12 @@ def _element_text(elem: etree._Element) -> str:
     return "".join(elem.itertext()).strip()
 
 
+def _positive_int(value: float | None) -> int | None:
+    if value is None or value <= 0:
+        return None
+    return max(1, int(math.ceil(value)))
+
+
 def extract_primitives(canonical_dom: CanonicalSVG) -> list[SVGPrimitive]:
     primitives: list[SVGPrimitive] = [
         SVGPrimitive(
@@ -176,6 +184,8 @@ def extract_primitives(canonical_dom: CanonicalSVG) -> list[SVGPrimitive]:
         )
     ]
     for elem in canonical_dom.root.iter():
+        if not isinstance(elem.tag, str):
+            continue
         tag = etree.QName(elem).localname
         if tag == "svg":
             continue
@@ -248,8 +258,8 @@ def infer_ir(objects: list[SVGPrimitive]) -> DiagramIRDocument:
                 label=label or node_id,
                 metadata={"bbox": shape.bbox, "source": "svg"},
                 size_hint=SizeHint(
-                    min_width=int(shape.bbox[2]) if shape.bbox and shape.bbox[2] > 0 else None,
-                    min_height=int(shape.bbox[3]) if shape.bbox and shape.bbox[3] > 0 else None,
+                    min_width=_positive_int(shape.bbox[2] if shape.bbox else None),
+                    min_height=_positive_int(shape.bbox[3] if shape.bbox else None),
                 ),
                 style=NodeStyle(
                     fill=shape.attrs.get("fill"),

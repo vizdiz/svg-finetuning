@@ -70,7 +70,7 @@ def test_generate_request_validation_rejects_empty_prompt():
     try:
         GenerateRequest.from_dict({"prompt": "  "})
     except ValueError as exc:
-        assert "prompt is required" in str(exc)
+        assert "prompt or media input is required" in str(exc)
     else:
         raise AssertionError("empty prompt should be rejected")
 

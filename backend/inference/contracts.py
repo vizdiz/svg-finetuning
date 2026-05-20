@@ -45,19 +45,27 @@ class ModelGenerationRequest:
     seed: int | None = None
     cache_namespace: str = "default"
     max_tokens: int = 2048
+    input_mode: str = "text"
+    reference_images: list[str] = field(default_factory=list)
+    attachments: list[str] = field(default_factory=list)
+    media_metadata: dict[str, Any] = field(default_factory=dict)
+    diagram_description: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def validate(self) -> None:
         if not self.request_id:
             raise ValueError("request_id is required")
-        if not self.prompt.strip():
-            raise ValueError("prompt is required")
+        has_media = bool(self.reference_images or self.attachments or self.diagram_description.strip())
+        if not self.prompt.strip() and not has_media:
+            raise ValueError("prompt or diagram description is required")
         if int(self.revision_index) < 0:
             raise ValueError("revision_index must be non-negative")
         if self.width <= 0 or self.height <= 0:
             raise ValueError("width and height must be positive")
         if self.max_tokens <= 0:
             raise ValueError("max_tokens must be positive")
+        if self.input_mode and self.input_mode not in {"text", "image", "mixed"}:
+            raise ValueError("input_mode must be text, image, or mixed")
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -82,6 +90,11 @@ class ModelGenerationRequest:
             seed=payload.get("seed"),
             cache_namespace=str(payload.get("cache_namespace", "default")),
             max_tokens=int(payload.get("max_tokens", 2048)),
+            input_mode=str(payload.get("input_mode", "text")),
+            reference_images=list(payload.get("reference_images", []) or []),
+            attachments=list(payload.get("attachments", []) or []),
+            media_metadata=dict(payload.get("media_metadata", {}) or {}),
+            diagram_description=str(payload.get("diagram_description", "")),
             metadata=dict(payload.get("metadata", {}) or {}),
         )
         request.validate()

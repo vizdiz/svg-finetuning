@@ -112,7 +112,8 @@ def test_dry_run_validates_captions_and_writes_local_manifest(monkeypatch, tmp_p
         captured["captioned"] = raw_svgs
         return [_record(raw_svgs[0])], []
 
-    def fake_dry_run_write(records, output_dir):
+    def fake_dry_run_write(*args, **kwargs):
+        records, output_dir = args[:2]
         captured["records"] = records
         captured["output_dir"] = output_dir
         return f"{output_dir}/manifest.json"
@@ -178,7 +179,7 @@ def test_caption_failures_are_logged_and_skipped(monkeypatch, tmp_path):
     monkeypatch.setattr(runner, "_selected_scrapers", lambda source, wikipedia_source="api": [_FakeScraper([ok, failed])])
     monkeypatch.setattr(runner, "validate_svg", lambda svg, config: (True, "ok"))
     monkeypatch.setattr(runner, "batch_caption", lambda raw_svgs, config: ([_record(ok)], [(failed, "caption_failed")]))
-    monkeypatch.setattr(runner, "dry_run_write", lambda records, output_dir: f"{output_dir}/manifest.json")
+    monkeypatch.setattr(runner, "dry_run_write", lambda *args, **kwargs: f"{args[1]}/manifest.json")
 
     stats = runner.run(
         SimpleNamespace(sources="arxiv", max_per_source=5, dry_run=True, output_dir=str(tmp_path), no_caption=False)
@@ -199,7 +200,7 @@ def test_scraper_exception_skips_source_and_continues(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(runner, "validate_svg", lambda svg, config: (True, "ok"))
     monkeypatch.setattr(runner, "batch_caption", lambda raw_svgs, config: ([_record(good)], []))
-    monkeypatch.setattr(runner, "dry_run_write", lambda records, output_dir: f"{output_dir}/manifest.json")
+    monkeypatch.setattr(runner, "dry_run_write", lambda *args, **kwargs: f"{args[1]}/manifest.json")
 
     stats = runner.run(
         SimpleNamespace(sources="both", max_per_source=5, dry_run=True, output_dir=str(tmp_path), no_caption=False)
@@ -264,7 +265,7 @@ def test_require_diagram_ir_filters_non_roundtrippable_svgs(monkeypatch, tmp_pat
         return [_record(raw_svgs[0])], []
 
     monkeypatch.setattr(runner, "batch_caption", fake_batch_caption)
-    monkeypatch.setattr(runner, "dry_run_write", lambda records, output_dir: f"{output_dir}/manifest.json")
+    monkeypatch.setattr(runner, "dry_run_write", lambda *args, **kwargs: f"{args[1]}/manifest.json")
 
     stats = runner.run(
         SimpleNamespace(

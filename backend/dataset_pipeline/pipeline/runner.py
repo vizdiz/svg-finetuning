@@ -119,6 +119,18 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Write accepted diagram IR JSON next to dry-run outputs for inspection",
     )
+    parser.add_argument(
+        "--upload-dry-run-to-s3",
+        dest="upload_dry_run_to_s3",
+        action="store_true",
+        help="Mirror dry-run artifacts to S3 under a dry-run prefix",
+    )
+    parser.add_argument(
+        "--no-upload-dry-run-to-s3",
+        dest="upload_dry_run_to_s3",
+        action="store_false",
+        help="Keep dry-run artifacts local only",
+    )
     return parser
 
 
@@ -160,6 +172,7 @@ def _load_pipeline_config(args: argparse.Namespace):
         caption_local_base_url=getattr(args, "caption_local_base_url", "http://localhost:11434/v1"),
         caption_local_model=getattr(args, "caption_local_model", "llava"),
         caption_local_timeout_s=60.0,
+        upload_dry_run_to_s3=getattr(args, "upload_dry_run_to_s3", False),
     )
 
 
@@ -192,14 +205,46 @@ def _upload_raw_svg(raw_svg: RawSVG, config: PipelineConfig, s3_client) -> bool:
     return False
 
 
-def _write_raw_svg_locally(raw_svg: RawSVG, output_dir: str) -> None:
+def _dry_run_prefix(output_dir: str) -> str:
+    return f"dry-run/{Path(output_dir).name}"
+
+
+def _write_raw_svg_locally(
+    raw_svg: RawSVG,
+    output_dir: str,
+    *,
+    s3_client=None,
+    s3_bucket: str = "",
+    upload_to_s3: bool = False,
+    s3_prefix: str = "",
+    stats: RunStats | None = None,
+) -> None:
     dest = Path(output_dir) / "raw" / raw_svg.domain / f"{raw_svg.source_id}.svg"
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(raw_svg.svg_string)
     logger.info("Wrote %s", dest)
+    if upload_to_s3 and s3_client is not None and s3_bucket:
+        key = f"{s3_prefix}/raw/{raw_svg.domain}/{raw_svg.source_id}.svg".lstrip("/")
+        s3_client.put_object(
+            Bucket=s3_bucket,
+            Key=key,
+            Body=raw_svg.svg_string.encode(),
+            ContentType="image/svg+xml",
+        )
+        if stats is not None:
+            stats.written_to_s3 += 1
 
 
-def _write_ir_locally(raw_svg: RawSVG, output_dir: str) -> None:
+def _write_ir_locally(
+    raw_svg: RawSVG,
+    output_dir: str,
+    *,
+    s3_client=None,
+    s3_bucket: str = "",
+    upload_to_s3: bool = False,
+    s3_prefix: str = "",
+    stats: RunStats | None = None,
+) -> None:
     diagram_ir = raw_svg.metadata.get("diagram_ir")
     if not diagram_ir:
         return
@@ -207,6 +252,16 @@ def _write_ir_locally(raw_svg: RawSVG, output_dir: str) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(json.dumps(diagram_ir, indent=2, sort_keys=True))
     logger.info("Wrote %s", dest)
+    if upload_to_s3 and s3_client is not None and s3_bucket:
+        key = f"{s3_prefix}/ir/{raw_svg.domain}/{raw_svg.source_id}.json".lstrip("/")
+        s3_client.put_object(
+            Bucket=s3_bucket,
+            Key=key,
+            Body=json.dumps(diagram_ir, indent=2, sort_keys=True).encode(),
+            ContentType="application/json",
+        )
+        if stats is not None:
+            stats.written_to_s3 += 1
 
 
 def _update_raster_skipped(raw_svg: RawSVG, stats: RunStats) -> None:
@@ -230,6 +285,8 @@ def _scrape_valid_svgs(
     lock = threading.Lock()
     quality_counts: Counter[str] = Counter()
     quality_bucket_size = max(1, int(scrape_config.quality_report_every or 1000))
+    dry_run_upload_to_s3 = bool(getattr(pipeline_config, "upload_dry_run_to_s3", False))
+    dry_run_s3_prefix = _dry_run_prefix(output_dir)
 
     def _log_quality_report(checked: int) -> None:
         if not quality_counts:
@@ -282,9 +339,25 @@ def _scrape_valid_svgs(
                         _log_quality_report(stats.scraped)
 
                 if dry_run:
-                    _write_raw_svg_locally(raw_svg, output_dir)
+                    _write_raw_svg_locally(
+                        raw_svg,
+                        output_dir,
+                        s3_client=s3_client,
+                        s3_bucket=getattr(pipeline_config, "s3_data_bucket", ""),
+                        upload_to_s3=dry_run_upload_to_s3,
+                        s3_prefix=dry_run_s3_prefix,
+                        stats=stats,
+                    )
                     if getattr(scrape_config, "dump_ir", False):
-                        _write_ir_locally(raw_svg, output_dir)
+                        _write_ir_locally(
+                            raw_svg,
+                            output_dir,
+                            s3_client=s3_client,
+                            s3_bucket=getattr(pipeline_config, "s3_data_bucket", ""),
+                            upload_to_s3=dry_run_upload_to_s3,
+                            s3_prefix=dry_run_s3_prefix,
+                            stats=stats,
+                        )
                 elif _upload_raw_svg(raw_svg, pipeline_config, s3_client):
                     with lock:
                         stats.written_to_s3 += 1
@@ -339,6 +412,8 @@ def _write_final_summary(stats: RunStats) -> None:
 
 def run(args: argparse.Namespace) -> RunStats:
     config = _load_pipeline_config(args)
+    dry_run_upload_to_s3 = bool(getattr(config, "upload_dry_run_to_s3", False))
+    dry_run_s3_prefix = _dry_run_prefix(args.output_dir)
     scrape_config = ScrapeConfig(
         max_svgs_per_source=args.max_per_source,
         retrieval_parallelism=getattr(args, "retrieval_parallelism", 2),
@@ -357,9 +432,20 @@ def run(args: argparse.Namespace) -> RunStats:
     stats = RunStats()
 
     s3_client = None
-    if not args.dry_run:
-        boto3.setup_default_session(profile_name=config.aws_profile, region_name=config.region)
-        s3_client = boto3.Session(profile_name=config.aws_profile, region_name=config.region).client("s3")
+    if args.dry_run and dry_run_upload_to_s3:
+        if getattr(config, "aws_profile", ""):
+            boto3.setup_default_session(profile_name=config.aws_profile, region_name=config.region)
+            s3_client = boto3.Session(profile_name=config.aws_profile, region_name=config.region).client("s3")
+        else:
+            boto3.setup_default_session(region_name=config.region)
+            s3_client = boto3.Session(region_name=config.region).client("s3")
+    elif not args.dry_run:
+        if getattr(config, "aws_profile", ""):
+            boto3.setup_default_session(profile_name=config.aws_profile, region_name=config.region)
+            s3_client = boto3.Session(profile_name=config.aws_profile, region_name=config.region).client("s3")
+        else:
+            boto3.setup_default_session(region_name=config.region)
+            s3_client = boto3.Session(region_name=config.region).client("s3")
 
     valid_svgs = _scrape_valid_svgs(
         _selected_scrapers(args.sources, getattr(args, "wikipedia_source", "api")),
@@ -386,7 +472,13 @@ def run(args: argparse.Namespace) -> RunStats:
 
     if records:
         stats.manifest_uri = (
-            dry_run_write(records, args.output_dir)
+            dry_run_write(
+                records,
+                args.output_dir,
+                config=config,
+                upload_to_s3=bool(getattr(args, "upload_dry_run_to_s3", False)),
+                dry_run_s3_prefix=dry_run_s3_prefix,
+            )
             if args.dry_run
             else write_manifest(records, config)
         )

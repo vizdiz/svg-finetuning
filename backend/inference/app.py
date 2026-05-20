@@ -16,7 +16,11 @@ import uuid
 
 from backend.feedback.ingest import parse_feedback_event
 from backend.inference.contracts import ModelGenerationRequest
-from backend.inference.endpoint_clients import SageMakerVLLMEndpointClient
+from backend.inference.endpoint_clients import (
+    SageMakerMediaDescriptionEndpointClient,
+    SageMakerVLLMEndpointClient,
+)
+from backend.inference.multimodal import normalize_generate_request
 from backend.inference.router import (
     CacheClient,
     EndpointClient,
@@ -48,6 +52,9 @@ class InferenceAppConfig:
     endpoint_model: str = "Qwen/Qwen2.5-7B-Instruct"
     endpoint_name: str = ""
     endpoint_timeout_s: float = 60.0
+    media_description_mode: str = "deterministic"
+    media_description_endpoint_name: str = ""
+    media_description_timeout_s: float = 60.0
     region: str = "us-east-1"
 
 
@@ -68,6 +75,9 @@ def _build_config() -> InferenceAppConfig:
         endpoint_model=os.environ.get("ENDPOINT_MODEL", "Qwen/Qwen2.5-7B-Instruct"),
         endpoint_name=os.environ.get("ENDPOINT_NAME", ""),
         endpoint_timeout_s=float(os.environ.get("ENDPOINT_TIMEOUT_S", "60")),
+        media_description_mode=os.environ.get("MEDIA_DESCRIPTION_MODE", "deterministic"),
+        media_description_endpoint_name=os.environ.get("MEDIA_DESCRIPTION_ENDPOINT_NAME", ""),
+        media_description_timeout_s=float(os.environ.get("MEDIA_DESCRIPTION_TIMEOUT_S", "60")),
         region=os.environ.get("AWS_REGION", os.environ.get("REGION", "us-east-1")),
     )
 
@@ -86,6 +96,16 @@ def build_endpoint_client(config: InferenceAppConfig):
             timeout_s=config.endpoint_timeout_s,
         )
     return InMemoryCacheEndpoint()
+
+
+def build_media_description_client(config: InferenceAppConfig):
+    if config.media_description_mode == "sagemaker" and config.media_description_endpoint_name:
+        return SageMakerMediaDescriptionEndpointClient(
+            endpoint_name=config.media_description_endpoint_name,
+            region=config.region,
+            timeout_s=config.media_description_timeout_s,
+        )
+    return None
 
 
 def build_session_store(config: InferenceAppConfig) -> SessionStore:
@@ -142,12 +162,21 @@ def handle_generate_api(
     cache = cache or build_cache()
     endpoint_client = endpoint_client or build_endpoint_client(config)
     session_store = session_store or build_session_store(config)
+    media_description_client = build_media_description_client(config)
 
     request = payload if isinstance(payload, GenerateRequest) else GenerateRequest.from_dict(payload)
     if not request.session_id:
         request.session_id = uuid.uuid4().hex
     if not request.branch_id:
         request.branch_id = uuid.uuid4().hex[:12]
+    has_media_inputs = bool(request.reference_images or request.attachments or request.diagram_description.strip())
+    if has_media_inputs and config.media_description_mode == "sagemaker" and not config.media_description_endpoint_name:
+        raise RuntimeError("MEDIA_DESCRIPTION_ENDPOINT_NAME is required when MEDIA_DESCRIPTION_MODE=sagemaker and media inputs are present")
+    if has_media_inputs and config.media_description_mode == "sagemaker":
+        media_description_client = build_media_description_client(config)
+    else:
+        media_description_client = None
+    multimodal = normalize_generate_request(request, description_client=media_description_client)
 
     response = route_request(
         request,
@@ -155,8 +184,9 @@ def handle_generate_api(
         endpoint_client=endpoint_client,
         config=RouterConfig(cache_ttl_seconds=config.cache_ttl_seconds),
     )
-    session = _load_or_create_session(session_store, request.session_id, request.prompt)
-    session.append_generation(_session_from_request(request, response, prompt=request.prompt))
+    session_prompt = multimodal.original_prompt
+    session = _load_or_create_session(session_store, request.session_id, session_prompt)
+    session.append_generation(_session_from_request(request, response, prompt=session_prompt))
     session_store.save(session)
     response.metadata = {
         **response.metadata,
@@ -165,6 +195,10 @@ def handle_generate_api(
         "revision_index": request.revision_index,
         "parent_request_id": request.parent_request_id,
         "session_updated_at": session.updated_at,
+        "diagram_description": multimodal.diagram_description,
+        "input_mode": request.input_mode,
+        "original_prompt": multimodal.original_prompt,
+        "media_summary": multimodal.media_summary,
     }
     response.metadata.setdefault("model_request", ModelGenerationRequest.from_dict(request.to_dict()).to_dict())
     return response

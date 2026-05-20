@@ -33,6 +33,43 @@ def test_generate_api_persists_session_and_branch_context():
     assert session.generations[0].request_id == "req-1"
 
 
+def test_generate_api_normalizes_media_inputs_before_generation():
+    cache = InMemoryCache()
+    endpoint = InMemoryCacheEndpoint()
+    store = InMemorySessionStore()
+
+    result = handle_generate_api(
+        {
+            "request_id": "req-media-1",
+            "session_id": "sess-media-1",
+            "branch_id": "branch-media",
+            "revision_index": 0,
+            "prompt": "",
+            "input_mode": "image",
+            "reference_images": ["s3://bucket/reference.png"],
+            "media_metadata": {
+                "s3://bucket/reference.png": {
+                    "filename": "reference.png",
+                    "mime_type": "image/png",
+                    "width": 1200,
+                    "height": 800,
+                    "caption": "reference diagram",
+                }
+            },
+        },
+        cache=cache,
+        endpoint_client=endpoint,
+        session_store=store,
+    )
+
+    session = store.load("sess-media-1")
+    assert result.metadata["input_mode"] == "image"
+    assert "diagram_description" in result.metadata
+    assert session is not None
+    assert session.prompt == ""
+    assert session.generations[0].prompt == ""
+
+
 def test_feedback_api_updates_session_history():
     store = InMemorySessionStore()
     handle_generate_api(

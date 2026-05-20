@@ -127,6 +127,28 @@ def test_dry_run_writes_local_files_without_trigger_manifest(tmp_path):
     assert manifest["record_count"] == manifest["total"] == len(records)
 
 
+def test_dry_run_can_upload_artifacts_to_s3(monkeypatch, tmp_path):
+    records = _records()
+    fake_s3 = _FakeS3()
+    monkeypatch.setattr(manifest_writer.boto3, "client", lambda name: fake_s3)
+
+    returned = manifest_writer.dry_run_write(
+        records,
+        str(tmp_path),
+        config=SimpleNamespace(s3_data_bucket="bucket"),
+        upload_to_s3=True,
+        dry_run_s3_prefix="dry-run/test-run",
+    )
+
+    assert returned == f"s3://bucket/dry-run/test-run/{tmp_path.name}/manifest.json"
+    assert [put["Key"] for put in fake_s3.puts] == [
+        f"dry-run/test-run/{tmp_path.name}/train.jsonl",
+        f"dry-run/test-run/{tmp_path.name}/val.jsonl",
+        f"dry-run/test-run/{tmp_path.name}/manifest.json",
+    ]
+    assert fake_s3.puts[-1]["ContentType"] == "application/json"
+
+
 def test_summary_table_is_logged(caplog, tmp_path):
     caplog.set_level(logging.INFO, logger=manifest_writer.logger.name)
 

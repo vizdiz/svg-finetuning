@@ -41,9 +41,25 @@ def _load_model():
 
 
 def _build_prompt(request: ModelGenerationRequest) -> str:
+    normalized_prompt = ""
+    if isinstance(request.metadata, dict):
+        normalized_prompt = str(request.metadata.get("normalized_prompt") or "").strip()
+    prompt_text = normalized_prompt or request.prompt.strip() or request.diagram_description.strip() or "Describe the uploaded reference media."
+    diagram_description = request.diagram_description.strip()
+    media_summary = request.metadata.get("media_summary") if isinstance(request.metadata, dict) else None
+    media_block = ""
+    if diagram_description:
+        media_block = f"\nDiagram description:\n{diagram_description}\n"
+    elif media_summary:
+        if isinstance(media_summary, list):
+            media_text = "\n".join(f"- {item}" for item in media_summary if str(item).strip())
+        else:
+            media_text = str(media_summary)
+        media_block = f"\nDiagram description:\n{media_text}\n"
     return (
         f"{request.system_prompt}\n\n"
-        f"Prompt:\n{request.prompt}\n\n"
+        f"Prompt:\n{prompt_text}\n\n"
+        f"{media_block}"
         f"Revision index: {request.revision_index}\n"
         f"Branch id: {request.branch_id}\n"
         f"Feedback: {request.feedback}\n"
@@ -86,6 +102,9 @@ async def invocations(request: Request) -> dict[str, object]:
             "revision_index": model_request.revision_index,
             "parent_request_id": model_request.parent_request_id,
             "feedback_rating": model_request.feedback_rating,
+            "input_mode": model_request.input_mode,
+            "diagram_description": model_request.diagram_description,
+            "reference_images": model_request.reference_images,
         },
     )
     return asdict(response)

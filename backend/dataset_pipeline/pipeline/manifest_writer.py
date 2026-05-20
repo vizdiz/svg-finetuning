@@ -111,6 +111,10 @@ def _log_summary_table(manifest: dict) -> None:
     logger.info("\n%s\n%s\n%s\n%s\n%s", top, header, sep, "\n".join(body), bottom)
 
 
+def _put_s3_object(s3, *, bucket: str, key: str, body: str, content_type: str) -> None:
+    s3.put_object(Bucket=bucket, Key=key, Body=body.encode(), ContentType=content_type)
+
+
 def write_manifest(records: list[TrainingRecord], config: PipelineConfig) -> str:
     train_records, val_records = _split_records(records)
 
@@ -127,33 +131,30 @@ def write_manifest(records: list[TrainingRecord], config: PipelineConfig) -> str
     )
 
     s3 = boto3.client("s3")
-    s3.put_object(
-        Bucket=config.s3_data_bucket,
-        Key=_TRAIN_KEY,
-        Body=_jsonl(train_records).encode(),
-        ContentType="application/jsonl",
-    )
-    s3.put_object(
-        Bucket=config.s3_data_bucket,
-        Key=_VAL_KEY,
-        Body=_jsonl(val_records).encode(),
-        ContentType="application/jsonl",
-    )
+    _put_s3_object(s3, bucket=config.s3_data_bucket, key=_TRAIN_KEY, body=_jsonl(train_records), content_type="application/jsonl")
+    _put_s3_object(s3, bucket=config.s3_data_bucket, key=_VAL_KEY, body=_jsonl(val_records), content_type="application/jsonl")
 
     _log_summary_table(manifest)
 
     # TRIGGER: this write fires the retraining Lambda
-    s3.put_object(
-        Bucket=config.s3_data_bucket,
-        Key=_MANIFEST_KEY,
-        Body=json.dumps(manifest, indent=2).encode(),
-        ContentType="application/json",
+    _put_s3_object(
+        s3,
+        bucket=config.s3_data_bucket,
+        key=_MANIFEST_KEY,
+        body=json.dumps(manifest, indent=2),
+        content_type="application/json",
     )
 
     return manifest_s3_uri
 
 
-def dry_run_write(records: list[TrainingRecord], output_dir: str) -> str:
+def dry_run_write(
+    records: list[TrainingRecord],
+    output_dir: str,
+    config: object | None = None,
+    upload_to_s3: bool = False,
+    dry_run_s3_prefix: str = "dry-run/",
+) -> str:
     train_records, val_records = _split_records(records)
 
     out = Path(output_dir)
@@ -176,5 +177,35 @@ def dry_run_write(records: list[TrainingRecord], output_dir: str) -> str:
     manifest_path.write_text(json.dumps(manifest, indent=2))
 
     _log_summary_table(manifest)
+
+    if upload_to_s3 and config is not None:
+        s3 = boto3.client("s3")
+        bucket = getattr(config, "s3_data_bucket", "")
+        if bucket:
+            prefix = dry_run_s3_prefix.strip("/")
+            prefix = f"{prefix}/" if prefix else ""
+            run_prefix = f"{prefix}{Path(output_dir).name}/"
+            _put_s3_object(
+                s3,
+                bucket=bucket,
+                key=f"{run_prefix}train.jsonl",
+                body=_jsonl(train_records),
+                content_type="application/jsonl",
+            )
+            _put_s3_object(
+                s3,
+                bucket=bucket,
+                key=f"{run_prefix}val.jsonl",
+                body=_jsonl(val_records),
+                content_type="application/jsonl",
+            )
+            _put_s3_object(
+                s3,
+                bucket=bucket,
+                key=f"{run_prefix}manifest.json",
+                body=json.dumps(manifest, indent=2),
+                content_type="application/json",
+            )
+            return f"s3://{bucket}/{run_prefix}manifest.json"
 
     return str(manifest_path)

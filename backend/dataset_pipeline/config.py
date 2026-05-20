@@ -28,7 +28,7 @@ load_dotenv()
 @dataclass
 class PipelineConfig:
     anthropic_api_key: str = field(default_factory=lambda: os.environ["ANTHROPIC_API_KEY"])
-    aws_profile: str = field(default_factory=lambda: os.environ["AWS_PROFILE"])
+    aws_profile: str = field(default_factory=lambda: os.environ.get("AWS_PROFILE", ""))
     s3_data_bucket: str = field(default_factory=lambda: os.environ["S3_DATA_BUCKET"])
     s3_scripts_bucket: str = field(default_factory=lambda: os.environ["S3_SCRIPTS_BUCKET"])
     region: str = field(default_factory=lambda: os.environ["REGION"])
