@@ -3,7 +3,7 @@ dataset_interface.py
 Contract between the dataset generation pipeline and the training pipeline.
 
 The dataset pipeline (not yet implemented) is responsible for:
-  1. Generating/aggregating SVG training examples
+  1. Generating/aggregating SVG and IR-labeled training examples
   2. Writing them as JSONL files under s3://<data-bucket>/train/<batch-id>/
   3. Writing a DatasetManifest to s3://<data-bucket>/train/dataset_manifest.json
 
@@ -12,9 +12,8 @@ pipeline reads nothing else from the dataset pipeline.
 """
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Any, List
 import json
-from datetime import datetime, timezone
 
 
 @dataclass
@@ -58,16 +57,48 @@ class TrainingRecord:
     """
     Schema for a single record in a JSONL training file.
     Each line in every file listed in the manifest must deserialize to this.
+
+    Legacy datasets may contain SVG markup only. IR-enabled datasets add
+    diagram_ir alongside the SVG debug artifact.
     """
-    prompt: str     # natural language description of the SVG to generate
-    svg: str        # the target SVG string (well-formed XML)
+    prompt: str
+    svg: str = ""
+    diagram_ir: dict[str, Any] | None = None
+    id: str = ""
+    source: str = ""
+    split: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def target_text(self) -> str:
+        if self.diagram_ir is not None:
+            return json.dumps(self.diagram_ir, indent=2, sort_keys=True)
+        if self.svg:
+            return self.svg
+        raise ValueError("Training record has neither diagram_ir nor svg")
 
     @classmethod
     def from_dict(cls, d: dict) -> "TrainingRecord":
-        missing = [f for f in ("prompt", "svg") if f not in d]
+        missing = [f for f in ("prompt",) if f not in d]
         if missing:
             raise ValueError(f"Training record missing fields: {missing}")
-        return cls(prompt=d["prompt"], svg=d["svg"])
+
+        metadata = dict(d.get("metadata", {}) or {})
+        diagram_ir = d.get("diagram_ir")
+        if diagram_ir is None and "diagram_ir" in metadata:
+            diagram_ir = metadata["diagram_ir"]
+        if isinstance(diagram_ir, str):
+            diagram_ir = json.loads(diagram_ir)
+
+        svg = d.get("svg") or d.get("completion") or ""
+        return cls(
+            prompt=d["prompt"],
+            svg=svg,
+            diagram_ir=diagram_ir,
+            id=d.get("id", ""),
+            source=d.get("source", ""),
+            split=d.get("split", ""),
+            metadata=metadata,
+        )
 
 
 class DatasetLoader:
@@ -95,12 +126,12 @@ class DatasetLoader:
     def as_hf_dataset(self, tokenizer, max_length: int = 1024):
         """
         Returns a HuggingFace Dataset ready for Trainer.
-        Format: <prompt>\n\n<svg>
+        Format: <prompt>\n\n<diagram_ir JSON> when available, else <prompt>\n\n<svg>
         """
         from datasets import Dataset
 
         records = [
-            {"text": f"{r.prompt}\n\n{r.svg}"}
+            {"text": f"{r.prompt}\n\n{r.target_text()}"}
             for r in self.iter_records()
         ]
         if not records:

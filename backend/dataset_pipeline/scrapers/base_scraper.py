@@ -26,7 +26,7 @@ from typing import Iterator
 import boto3
 from lxml import etree
 
-from dataset_pipeline.config import ScrapeConfig
+from backend.dataset_pipeline.config import ScrapeConfig
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -43,7 +43,7 @@ class RawSVG:
 
 def count_svg_elements(svg_string: str) -> int:
     root = etree.fromstring(svg_string.encode())
-    return len(list(root))
+    return sum(1 for _ in root.iter()) - 1  # all descendants, excluding root
 
 
 class BaseScraper(ABC):

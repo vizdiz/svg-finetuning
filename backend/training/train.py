@@ -11,7 +11,7 @@ Qwen2.5-specific details:
   - Uses the Qwen2.5 chat template (<|im_start|>/<|im_end|>) so the model
     learns the correct input/output structure.
   - Labels are masked over the system + user turns so loss is computed
-    only on the assistant (SVG) response.
+    only on the assistant response.
   - LoRA targets q_proj, k_proj, v_proj, o_proj (all attention projections).
 """
 import json
@@ -35,7 +35,8 @@ SM_MODEL_DIR = os.environ.get("SM_MODEL_DIR", "/opt/ml/model")
 SM_HP_PATH   = "/opt/ml/input/config/hyperparameters.json"
 REGION       = os.environ.get("AWS_REGION",   "us-east-1")
 
-SYSTEM_PROMPT = "You are an SVG generation expert. Given a description, produce well-formed SVG markup."
+SYSTEM_PROMPT_SVG = "You are an SVG generation expert. Given a description, produce well-formed SVG markup."
+SYSTEM_PROMPT_IR = "You are a diagram compiler. Given a description, produce valid diagram IR JSON only."
 
 
 def load_hyperparameters() -> dict:
@@ -61,31 +62,37 @@ def load_hyperparameters() -> dict:
 
 def build_dataset(tokenizer, manifest, max_length: int) -> Dataset:
     """
-    Formats each (prompt, svg) record using the Qwen2.5 chat template and
-    masks prompt tokens in labels so loss is computed only on the SVG output.
+    Formats each record using the Qwen2.5 chat template and masks prompt
+    tokens in labels so loss is computed only on the assistant output.
+
+    IR-labeled records train the model to emit JSON. Legacy SVG records
+    remain supported for backward compatibility.
     """
     loader = DatasetLoader(manifest)
     input_ids_list, attention_mask_list, labels_list = [], [], []
 
     for record in loader.iter_records():
+        system_prompt = SYSTEM_PROMPT_IR if record.diagram_ir is not None else SYSTEM_PROMPT_SVG
+        target_text = record.target_text()
+
         # Tokenize the prompt-only portion to determine the mask boundary.
         # add_generation_prompt=True appends <|im_start|>assistant\n so the
         # boundary lands exactly where the model should start generating.
         prompt_ids = tokenizer.apply_chat_template(
             [
-                {"role": "system",    "content": SYSTEM_PROMPT},
-                {"role": "user",      "content": record.prompt},
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": record.prompt},
             ],
             tokenize=True,
             add_generation_prompt=True,
         )
 
-        # Full sequence: system + user + assistant (SVG) + end token
+        # Full sequence: system + user + assistant (SVG or IR JSON) + end token
         full_ids = tokenizer.apply_chat_template(
             [
-                {"role": "system",    "content": SYSTEM_PROMPT},
-                {"role": "user",      "content": record.prompt},
-                {"role": "assistant", "content": record.svg},
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": record.prompt},
+                {"role": "assistant", "content": target_text},
             ],
             tokenize=True,
             add_generation_prompt=False,
