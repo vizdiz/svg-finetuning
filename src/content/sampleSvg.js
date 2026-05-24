@@ -19,8 +19,7 @@ function buildMockSvg({ title, connectorColor, note, prompt, feedback, revisionI
   <path d="M383 146H478" stroke="${connectorColor}" stroke-width="3" />
   <rect x="188" y="232" width="264" height="66" fill="#F0EFEB" stroke="#D0CFC8" stroke-width="2" />
   <text x="320" y="258" text-anchor="middle" fill="#2F2F2A" font-size="16" font-family="IBM Plex Mono">${safeNote}</text>
-  <text x="320" y="281" text-anchor="middle" fill="#2F2F2A" font-size="12" font-family="IBM Plex Mono">step:${revisionIndex} set:${branchLine}</text>
-  <text x="320" y="302" text-anchor="middle" fill="#2F2F2A" font-size="12" font-family="IBM Plex Mono">${feedbackLine || promptLine}</text>
+  <text x="320" y="288" text-anchor="middle" fill="#2F2F2A" font-size="12" font-family="IBM Plex Mono">${feedbackLine || promptLine}</text>
 </svg>`.trim()
 }
 

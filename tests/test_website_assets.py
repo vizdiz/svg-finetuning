@@ -3,25 +3,32 @@ from __future__ import annotations
 from pathlib import Path
 
 
-def test_vite_app_is_static_preview_board():
+def test_vite_app_is_functional_preview_workspace():
     root = Path(__file__).resolve().parents[1]
     app = (root / "src" / "App.jsx").read_text()
     styles = (root / "src" / "App.css").read_text()
     index_css = (root / "index.css").read_text()
 
-    assert "preview-grid" in app
-    assert "PROMPT" in app
-    assert "DRAFT & FEEDBACK" in app
-    assert "REVISE & DOWNLOAD" in app
-    assert "coming soon." in app
+    assert "useState('prompt')" in app
+    assert "execute-api.us-east-1.amazonaws.com/api/generate" in app
+    assert "reference_images" in app
+    assert "media_metadata" in app
+    assert "attach media" in app
+    assert "↓ download .svg" in app
     assert "what should change?" in app
-    assert "revise with feedback" in app
-    assert "download draft" in app
-    assert "/api/" not in app
-    assert "static-copy" in app
+    assert "iterate →" in app
+    assert "unlock download →" in app
+    assert "rating and feedback are required." in app
+    assert "generated." in app
+    assert "generation did not return svg." in app
+    assert "skip" not in app
+    assert "what was wrong? (optional)" not in app
+    assert "/api/generate" in app
     assert "family=IBM+Plex+Mono" in index_css
     assert "border-radius" not in styles
-    assert "preview-grid" in styles
-    assert "font-size: 56px" in styles
-    assert "font-size: 30px" in styles
-    assert "font-size: 10px" in styles
+    assert "box-shadow" not in styles
+    assert "#FFFFFF" not in styles
+    assert "font-size: 16px" in styles
+    assert "font-size: 12px" in styles
+    assert "font-size: 11px" in styles
+    assert "font-size: 18px" in styles
