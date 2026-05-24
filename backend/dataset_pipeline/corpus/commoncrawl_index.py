@@ -4,7 +4,6 @@ from pathlib import Path
 import gzip
 import io
 import json
-import zlib
 from typing import Any, Iterable
 from urllib.parse import quote
 
@@ -105,25 +104,38 @@ def _iter_lines_from_https(key: str) -> Iterable[str]:
     """Stream-decompress a CDX gzip file from data.commoncrawl.org.
 
     Yields nothing on 404 (caller moves to next key automatically).
-    Keeps peak memory to one 64KB decompressed chunk at a time.
+    CDX files are multi-stream gzip; gzip.GzipFile handles stream boundaries
+    automatically. Uses a file-like wrapper so the HTTP body is read lazily.
     """
     url = f"https://data.commoncrawl.org/{quote(key)}"
     with httpx.stream("GET", url, timeout=120.0) as resp:
         if resp.status_code == 404:
             return  # empty generator — caller iterates over nothing and continues
         resp.raise_for_status()
-        decompressor = zlib.decompressobj(zlib.MAX_WBITS | 16)
-        buf = b""
-        for chunk in resp.iter_bytes(chunk_size=65536):
-            buf += decompressor.decompress(chunk)
-            # Split once per chunk — O(n) vs the naive while/index/slice O(n²).
-            parts = buf.split(b"\n")
-            buf = parts[-1]  # last element is the (possibly partial) current line
-            for line_bytes in parts[:-1]:
-                yield line_bytes.decode("utf-8", errors="replace").rstrip()
-        buf += decompressor.flush()
-        if buf.strip():
-            yield buf.decode("utf-8", errors="replace").rstrip()
+
+        class _StreamReader(io.RawIOBase):
+            def __init__(self) -> None:
+                self._it = resp.iter_bytes(chunk_size=65536)
+                self._buf = b""
+
+            def readable(self) -> bool:
+                return True
+
+            def readinto(self, b: bytearray) -> int:
+                n = len(b)
+                while len(self._buf) < n:
+                    try:
+                        self._buf += next(self._it)
+                    except StopIteration:
+                        break
+                chunk = self._buf[:n]
+                self._buf = self._buf[n:]
+                b[: len(chunk)] = chunk
+                return len(chunk)
+
+        with gzip.open(io.BufferedReader(_StreamReader()), "rt", encoding="utf-8", errors="replace") as gz:
+            for line in gz:
+                yield line.rstrip("\n\r")
 
 
 def iter_commoncrawl_index_rows(
