@@ -44,7 +44,7 @@ class ModelGenerationRequest:
     height: int = 480
     seed: int | None = None
     cache_namespace: str = "default"
-    max_tokens: int = 2048
+    max_tokens: int = 512
     input_mode: str = "text"
     reference_images: list[str] = field(default_factory=list)
     attachments: list[str] = field(default_factory=list)
@@ -89,7 +89,7 @@ class ModelGenerationRequest:
             height=int(payload.get("height", 480)),
             seed=payload.get("seed"),
             cache_namespace=str(payload.get("cache_namespace", "default")),
-            max_tokens=int(payload.get("max_tokens", 2048)),
+            max_tokens=int(payload.get("max_tokens", 512)),
             input_mode=str(payload.get("input_mode", "text")),
             reference_images=list(payload.get("reference_images", []) or []),
             attachments=list(payload.get("attachments", []) or []),

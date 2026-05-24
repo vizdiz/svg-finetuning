@@ -165,6 +165,8 @@ def handle_generate_api(
     media_description_client = build_media_description_client(config)
 
     request = payload if isinstance(payload, GenerateRequest) else GenerateRequest.from_dict(payload)
+    if not request.request_id:
+        request.request_id = uuid.uuid4().hex
     if not request.session_id:
         request.session_id = uuid.uuid4().hex
     if not request.branch_id:
@@ -260,6 +262,18 @@ def handle_api_gateway_event(
     config: InferenceAppConfig | None = None,
 ) -> dict[str, Any]:
     config = config or _build_config()
+    cors_headers = {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+        "Access-Control-Allow-Headers": "authorization,content-type",
+    }
+    if str(event.get("requestContext", {}).get("http", {}).get("method") or event.get("httpMethod") or "").upper() == "OPTIONS":
+        return {
+            "statusCode": 204,
+            "headers": cors_headers,
+            "body": "",
+        }
     body = event.get("body") or "{}"
     if event.get("isBase64Encoded"):
         raise ValueError("base64 encoded bodies are not supported in this stub router")
@@ -282,11 +296,11 @@ def handle_api_gateway_event(
         error = ApiErrorResponse(error=type(exc).__name__, message=str(exc))
         return {
             "statusCode": 400,
-            "headers": {"Content-Type": "application/json"},
+            "headers": cors_headers,
             "body": json.dumps(error.to_dict()),
         }
     return {
         "statusCode": 200,
-        "headers": {"Content-Type": "application/json"},
+        "headers": cors_headers,
         "body": json.dumps(result.to_dict() if hasattr(result, "to_dict") else result),
     }
