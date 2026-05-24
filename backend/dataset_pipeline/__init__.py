@@ -1,11 +1,7 @@
-"""
-dataset_pipeline
+"""Corpus-first dataset pipeline for SVG/diagram fine-tuning.
 
-End-to-end pipeline for building SVG training datasets for Qwen2.5-7B fine-tuning.
-
-Scrapes SVGs from arXiv and Wikipedia, captions them using the Anthropic API,
-normalizes and validates the SVG markup, then writes a DatasetManifest to S3
-that triggers the training Lambda.
-
-Entry point: backend/dataset_pipeline/pipeline/runner.py
+The old live scraper orchestration path has been removed. Dataset builds now
+flow through normalized corpus candidates, source-specific fetch/extract
+workers, validation, dedupe, normalization, product assembly, and an explicit
+manual promotion gate before `train/dataset_manifest.json` is written.
 """

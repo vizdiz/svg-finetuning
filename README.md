@@ -4,7 +4,7 @@ SVG generation model — fine-tuning, inference, feedback, and deployment infras
 
 ## Architecture
 
-- **Dataset pipeline**: scrapes SVGs from arXiv and Wikimedia, validates, ranks, captions, and writes manifests
+- **Dataset pipeline**: builds multi-source corpus candidates from bulk/index sources, fetches selected assets, validates, dedupes, assembles dataset products, and promotes manifests only after approval
 - **Training**: SageMaker processing/training/evaluation pipeline definitions and model registry helpers
 - **Inference**: SageMaker-hosted custom vLLM request router with a cache-first serving path
 - **Feedback**: JSONL schema + ingestion endpoint + rate-before-download gate
@@ -15,10 +15,9 @@ SVG generation model — fine-tuning, inference, feedback, and deployment infras
 
 ```
 backend/
-  dataset_pipeline/         # Scrapes SVGs from arXiv & Wikimedia, validates, captions, writes manifests
-    scrapers/               # Source-specific scrapers (arXiv, Wikimedia)
+  dataset_pipeline/         # Corpus-first dataset build system
+    corpus/                 # Source workers, candidate manifests, fetch/validate, dedupe, assembly, eval gates
     processing/             # Validate, normalise, and caption raw SVGs
-    pipeline/               # Orchestration, manifest writing, pipeline definitions
     config.py               # All settings via environment variables
     requirements.txt
 
