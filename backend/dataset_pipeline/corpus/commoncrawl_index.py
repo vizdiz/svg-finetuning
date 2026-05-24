@@ -116,10 +116,11 @@ def _iter_lines_from_https(key: str) -> Iterable[str]:
         buf = b""
         for chunk in resp.iter_bytes(chunk_size=65536):
             buf += decompressor.decompress(chunk)
-            while b"\n" in buf:
-                nl = buf.index(b"\n")
-                yield buf[:nl].decode("utf-8", errors="replace").rstrip()
-                buf = buf[nl + 1:]
+            # Split once per chunk — O(n) vs the naive while/index/slice O(n²).
+            parts = buf.split(b"\n")
+            buf = parts[-1]  # last element is the (possibly partial) current line
+            for line_bytes in parts[:-1]:
+                yield line_bytes.decode("utf-8", errors="replace").rstrip()
         buf += decompressor.flush()
         if buf.strip():
             yield buf.decode("utf-8", errors="replace").rstrip()
