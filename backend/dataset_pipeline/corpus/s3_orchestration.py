@@ -3,8 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 import gzip
 import json
+import time
 from typing import Any
 from urllib.parse import urlparse
+
+import httpx
 
 from backend.dataset_pipeline.corpus.schema import CorpusCandidate, read_candidates, utc_now
 
@@ -41,6 +44,14 @@ def _source_archive_suffix(key: str) -> str:
     return Path(key).suffix or ".tar"
 
 
+def _arxiv_https_download(arxiv_id: str, dest: Path, *, delay_s: float = 3.0) -> None:
+    url = f"https://arxiv.org/src/{arxiv_id}"
+    time.sleep(delay_s)
+    resp = httpx.get(url, follow_redirects=True, timeout=120.0)
+    resp.raise_for_status()
+    dest.write_bytes(resp.content)
+
+
 def download_arxiv_source_batch(
     *,
     input_candidates: Path,
@@ -48,11 +59,22 @@ def download_arxiv_source_batch(
     s3_client: Any | None = None,
     limit: int | None = None,
     request_payer: bool = True,
+    https_fallback: bool = True,
+    https_delay_s: float = 3.0,
 ) -> dict[str, Any]:
-    s3 = s3_client or build_s3_client()
     destination_root.mkdir(parents=True, exist_ok=True)
-    stats = {"total": 0, "downloaded": 0, "skipped_existing": 0, "missing_s3_uri": 0, "failed": 0, "limited": False}
+    stats = {
+        "total": 0, "downloaded": 0, "skipped_existing": 0,
+        "missing_s3_uri": 0, "https_fallback": 0, "failed": 0, "limited": False,
+    }
     failures: list[dict[str, str]] = []
+    _s3: Any | None = None
+
+    def _get_s3() -> Any:
+        nonlocal _s3
+        if _s3 is None:
+            _s3 = s3_client or build_s3_client()
+        return _s3
 
     for candidate in read_candidates(input_candidates):
         if candidate.source != "arxiv":
@@ -61,30 +83,49 @@ def download_arxiv_source_batch(
             stats["limited"] = True
             break
         stats["total"] += 1
+        arxiv_id = str(candidate.metadata.get("arxiv_id") or "")
         metadata_uri = str(candidate.metadata.get("source_s3_uri") or "")
         candidate_uri = str(candidate.uri)
         s3_uri = metadata_uri or (candidate_uri if candidate_uri.startswith("s3://") else "")
-        if not s3_uri:
-            stats["missing_s3_uri"] += 1
-            continue
-        try:
-            bucket, key = parse_s3_uri(s3_uri)
-            filename = candidate.metadata.get("arxiv_id", Path(key).name)
-            suffix = _source_archive_suffix(key)
-            basename = str(filename).replace("/", "_")
-            dest = destination_root / (basename if basename.endswith(suffix) else f"{basename}{suffix}")
+
+        if s3_uri:
+            try:
+                bucket, key = parse_s3_uri(s3_uri)
+                filename = arxiv_id or Path(key).name
+                suffix = _source_archive_suffix(key)
+                basename = str(filename).replace("/", "_")
+                dest = destination_root / (basename if basename.endswith(suffix) else f"{basename}{suffix}")
+                if dest.exists() and dest.stat().st_size > 0:
+                    stats["skipped_existing"] += 1
+                    continue
+                extra_args = {"RequestPayer": "requester"} if request_payer else None
+                if extra_args:
+                    _get_s3().download_file(bucket, key, str(dest), ExtraArgs=extra_args)
+                else:
+                    _get_s3().download_file(bucket, key, str(dest))
+                stats["downloaded"] += 1
+                continue
+            except Exception as exc:
+                if not https_fallback or not arxiv_id:
+                    stats["failed"] += 1
+                    failures.append({"candidate_id": candidate.candidate_id, "reason": f"{type(exc).__name__}: {exc}"})
+                    continue
+                # fall through to HTTPS
+
+        if https_fallback and arxiv_id:
+            dest = destination_root / f"{arxiv_id.replace('/', '_')}.tar.gz"
             if dest.exists() and dest.stat().st_size > 0:
                 stats["skipped_existing"] += 1
                 continue
-            extra_args = {"RequestPayer": "requester"} if request_payer else None
-            if extra_args:
-                s3.download_file(bucket, key, str(dest), ExtraArgs=extra_args)
-            else:
-                s3.download_file(bucket, key, str(dest))
-            stats["downloaded"] += 1
-        except Exception as exc:
-            stats["failed"] += 1
-            failures.append({"candidate_id": candidate.candidate_id, "reason": f"{type(exc).__name__}: {exc}"})
+            try:
+                _arxiv_https_download(arxiv_id, dest, delay_s=https_delay_s)
+                stats["downloaded"] += 1
+                stats["https_fallback"] += 1
+            except Exception as exc:
+                stats["failed"] += 1
+                failures.append({"candidate_id": candidate.candidate_id, "reason": f"https: {type(exc).__name__}: {exc}"})
+        else:
+            stats["missing_s3_uri"] += 1
 
     summary = {
         "created_at": utc_now(),
