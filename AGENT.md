@@ -165,6 +165,8 @@ Implemented:
   tarballs for an arXiv candidate manifest.
 - `tools/corpus/fetch_indexed_sources.py`: fetches selected GitHub/Common Crawl
   indexed SVG candidates.
+- `tools/corpus/fetch_commoncrawl_index.py`: fetches Common Crawl CDXJ index
+  slices from the public S3 collection and extracts SVG candidates.
 - `tools/corpus/download_arxiv_sources.py`: downloads requester-pays arXiv source
   archives from S3 for an arXiv candidate manifest.
 - `tools/corpus/dedupe_corpus_candidates.py`: dedupes one or more candidate
@@ -349,6 +351,11 @@ svg-corpus-build-bulk-candidates \
   --corpus-id github_index_v1 \
   --index-jsonl pipeline_output/corpus/github_svg_index.jsonl \
   --limit 7500
+
+svg-corpus-fetch-commoncrawl-index \
+  --crawl-id CC-MAIN-2026-17 \
+  --output pipeline_output/corpus/commoncrawl_cc_main_2026_17_svg_index.jsonl \
+  --limit 5000
 
 svg-corpus-build-bulk-candidates \
   --source commoncrawl \

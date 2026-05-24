@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from backend.dataset_pipeline.corpus.caption_queue import build_model_caption_queue
+from backend.dataset_pipeline.corpus.commoncrawl_index import fetch_commoncrawl_index_manifest
 from backend.dataset_pipeline.corpus.indexed_fetch import fetch_indexed_svg_candidates
 from backend.dataset_pipeline.corpus.promotion import promote_dataset_manifest
 from backend.dataset_pipeline.corpus.render_artifacts import build_render_artifacts
@@ -48,6 +49,11 @@ class FakeS3:
         self.puts.append(kwargs)
         body = kwargs["Body"]
         self.objects[(kwargs["Bucket"], kwargs["Key"])] = body if isinstance(body, bytes) else body.encode()
+
+    def list_objects_v2(self, **kwargs):
+        prefix = kwargs.get("Prefix", "")
+        contents = [{"Key": key} for bucket, key in self.objects if bucket == kwargs["Bucket"] and key.startswith(prefix)]
+        return {"Contents": contents}
 
 
 def test_arxiv_s3_batch_downloads_requester_pays_sources(tmp_path):
@@ -95,6 +101,32 @@ def test_commoncrawl_warc_byte_range_read_and_indexed_fetch(tmp_path):
         fetch_fn=lambda row: read_commoncrawl_warc_record(row, s3_client=s3),
     )
     assert fetched["stats"]["fetched"] == 1
+
+
+def test_commoncrawl_index_fetcher_extracts_svg_records(tmp_path):
+    s3 = FakeS3()
+    index_key = "cc-index/collections/CC-MAIN-2026-17/indexes/cdx-00000.gz"
+    raw = "\n".join(
+        [
+            'org,example)/a.svg 20260401010101 {"url":"https://example.org/a.svg","mime":"image/svg+xml","status":"200","digest":"d1","length":"111","offset":"22","filename":"crawl-data/CC-MAIN-2026-17/segments/x/warc/test.warc.gz"}',
+            'org,example)/b.html 20260401010102 {"url":"https://example.org/b.html","mime":"text/html","status":"200","digest":"d2","length":"222","offset":"33","filename":"crawl-data/CC-MAIN-2026-17/segments/x/warc/test.warc.gz"}',
+        ]
+    ).encode()
+    s3.objects[("commoncrawl", index_key)] = gzip.compress(raw)
+
+    summary = fetch_commoncrawl_index_manifest(
+        crawl_id="CC-MAIN-2026-17",
+        output_path=tmp_path / "commoncrawl.jsonl",
+        s3_client=s3,
+        max_files=1,
+        limit=10,
+    )
+
+    rows = [json.loads(line) for line in (tmp_path / "commoncrawl.jsonl").read_text().splitlines() if line.strip()]
+    assert summary["record_count"] == 1
+    assert rows[0]["url"].endswith(".svg")
+    assert rows[0]["warc_uri"].startswith("s3://commoncrawl/crawl-data/")
+    assert rows[0]["score"] > 0.0
 
 
 def test_render_artifacts_caption_queue_and_manual_promotion(tmp_path):
