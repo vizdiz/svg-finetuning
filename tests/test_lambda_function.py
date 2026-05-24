@@ -147,3 +147,12 @@ def test_handler_accepts_s3_event_and_starts_training(monkeypatch):
 
     assert response["statusCode"] == 200
     assert fake_sm.kwargs["TrainingJobName"].startswith("svg-finetune-")
+    assert fake_sm.kwargs["HyperParameters"]["num_train_epochs"] == "1"
+    assert fake_sm.kwargs["HyperParameters"]["per_device_train_batch_size"] == "1"
+    assert fake_sm.kwargs["HyperParameters"]["max_length"] == "4096"
+    assert fake_sm.kwargs["HyperParameters"]["max_target_chars"] == "100000"
+    assert fake_sm.kwargs["HyperParameters"]["drop_overlength_records"] == "true"
+    assert fake_sm.kwargs["HyperParameters"]["gradient_checkpointing"] == "true"
+    assert fake_sm.kwargs["HyperParameters"]["update_endpoint"] == "false"
+    assert fake_sm.kwargs["ResourceConfig"]["InstanceType"] == "ml.g5.2xlarge"
+    assert fake_sm.kwargs["Environment"]["PYTORCH_CUDA_ALLOC_CONF"] == "expandable_segments:True"

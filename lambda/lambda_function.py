@@ -20,6 +20,7 @@ MODELS_BUCKET = os.environ.get("MODELS_BUCKET", f"svg-finetuning-models-{ACCOUNT
 SM_ROLE = os.environ.get("SM_ROLE", f"arn:aws:iam::{ACCOUNT_ID}:role/SVGFinetuneSageMakerRole" if ACCOUNT_ID else "")
 ENDPOINT_NAME = os.environ.get("ENDPOINT_NAME", "svg-finetuning-inference")
 SCRIPTS_URI = os.environ.get("SCRIPTS_URI", f"s3://svg-finetuning-scripts-{ACCOUNT_ID}/training/" if ACCOUNT_ID else "")
+TRAINING_INSTANCE_TYPE = os.environ.get("TRAINING_INSTANCE_TYPE", "ml.g5.2xlarge")
 TRAINING_IMAGE = os.environ.get(
     "TRAINING_IMAGE",
     "763104351884.dkr.ecr.us-east-1.amazonaws.com/"
@@ -80,15 +81,21 @@ def handler(event, context):
             "model_name_or_path":          "Qwen/Qwen2.5-7B-Instruct",
             # data_bucket is the only dataset coupling — train.py reads the manifest from it
             "data_bucket":                  DATA_BUCKET,
-            "num_train_epochs":             "3",
-            "per_device_train_batch_size":  "2",
-            "gradient_accumulation_steps":  "4",
+            "num_train_epochs":             os.environ.get("TRAINING_EPOCHS", "1"),
+            "per_device_train_batch_size":  os.environ.get("TRAINING_BATCH_SIZE", "1"),
+            "gradient_accumulation_steps":  os.environ.get("TRAINING_GRAD_ACCUM", "8"),
             "learning_rate":                "2e-4",
             "fp16":                         "true",
+            "max_length":                   os.environ.get("TRAINING_MAX_LENGTH", "4096"),
+            "max_prompt_chars":             os.environ.get("TRAINING_MAX_PROMPT_CHARS", "4096"),
+            "max_target_chars":             os.environ.get("TRAINING_MAX_TARGET_CHARS", "100000"),
+            "drop_overlength_records":       os.environ.get("TRAINING_DROP_OVERLENGTH_RECORDS", "true"),
+            "gradient_checkpointing":       os.environ.get("TRAINING_GRADIENT_CHECKPOINTING", "true"),
             "lora_r":                       "16",
             "lora_alpha":                   "32",
             "lora_dropout":                 "0.05",
             "lora_target_modules":          "q_proj,k_proj,v_proj,o_proj",
+            "update_endpoint":              os.environ.get("TRAINING_UPDATE_ENDPOINT", "false"),
             "endpoint_name":                ENDPOINT_NAME,
             "models_bucket":                MODELS_BUCKET,
         },
@@ -104,7 +111,7 @@ def handler(event, context):
         ],
         OutputDataConfig={"S3OutputPath": f"s3://{MODELS_BUCKET}/training-jobs/"},
         ResourceConfig={
-            "InstanceType":    "ml.g5.2xlarge",
+            "InstanceType":    TRAINING_INSTANCE_TYPE,
             "InstanceCount":   1,
             "VolumeSizeInGB":  100,
         },
@@ -114,6 +121,7 @@ def handler(event, context):
             "HUGGING_FACE_HUB_TOKEN": hf_token,
             "TRANSFORMERS_CACHE":     "/opt/ml/model/.cache",
             "AWS_REGION":             REGION,
+            "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
         },
     )
 

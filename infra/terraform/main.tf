@@ -211,6 +211,14 @@ data "aws_iam_policy_document" "api_lambda_policy" {
     ]
     resources = ["arn:aws:sagemaker:${var.aws_region}:${local.account_id}:endpoint/${var.endpoint_name}"]
   }
+
+  statement {
+    effect = "Allow"
+    actions = [
+      "bedrock:InvokeModel",
+    ]
+    resources = ["*"]
+  }
 }
 
 resource "aws_iam_role_policy" "api_lambda" {
@@ -262,6 +270,8 @@ resource "aws_lambda_function" "api" {
       ENDPOINT_MODEL     = var.inference_endpoint_model
       ENDPOINT_TIMEOUT_S = "60"
       CACHE_TTL_SECONDS  = "86400"
+      BEDROCK_REPAIR_ENABLED  = "true"
+      BEDROCK_REPAIR_MODEL_ID = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
     }
   }
 }
@@ -508,7 +518,7 @@ resource "aws_cloudfront_distribution" "website" {
   }
 
   ordered_cache_behavior {
-    path_pattern             = "/api/*"
+    path_pattern             = "api/*"
     target_origin_id         = local.api_origin_id
     viewer_protocol_policy   = "redirect-to-https"
     allowed_methods          = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
