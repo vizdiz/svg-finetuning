@@ -4,7 +4,6 @@ from pathlib import Path
 import gzip
 import io
 import json
-import xml.etree.ElementTree as ET
 from typing import Any, Iterable
 from urllib.parse import quote
 
@@ -14,7 +13,6 @@ from backend.dataset_pipeline.corpus.schema import utc_now, write_jsonl
 
 COMMONCRAWL_BUCKET = "commoncrawl"
 COMMONCRAWL_INDEX_PREFIX = "cc-index/collections"
-_CC_S3_XML_BASE = "https://commoncrawl.s3.amazonaws.com/"
 
 
 def _parse_cdxj_line(line: str) -> dict[str, Any] | None:
@@ -54,6 +52,9 @@ def _svg_score(row: dict[str, Any]) -> float:
     return min(score, 1.0)
 
 
+_CC_MAX_INDEX_PARTITIONS = 300
+
+
 def _index_file_candidates(
     s3_client: Any | None, crawl_id: str, *, max_files: int | None = None
 ) -> list[str]:
@@ -63,18 +64,12 @@ def _index_file_candidates(
             Bucket=COMMONCRAWL_BUCKET, Prefix=prefix, RequestPayer="requester"
         )
         keys = [item["Key"] for item in response.get("Contents", []) if item["Key"].endswith(".gz")]
+        keys.sort()
     else:
-        url = f"{_CC_S3_XML_BASE}?prefix={quote(prefix)}&max-keys=1000"
-        resp = httpx.get(url, timeout=30.0)
-        resp.raise_for_status()
-        root = ET.fromstring(resp.text)
-        ns = {"s3": "http://s3.amazonaws.com/doc/2006-03-01/"}
-        keys = [
-            el.text
-            for el in root.findall(".//s3:Key", ns)
-            if el.text and el.text.endswith(".gz")
-        ]
-    keys.sort()
+        # Generate candidate key names; 404s are skipped in iter_commoncrawl_index_rows.
+        n = max_files if max_files is not None else _CC_MAX_INDEX_PARTITIONS
+        keys = [f"{prefix}cdx-{i:05d}.gz" for i in range(n)]
+        return keys  # already ordered, max_files already applied
     if max_files is not None:
         return keys[:max_files]
     return keys
@@ -98,6 +93,8 @@ def iter_commoncrawl_index_rows(
             payload = response["Body"].read()
         else:
             response = httpx.get(f"https://data.commoncrawl.org/{quote(key)}", timeout=120.0)
+            if response.status_code == 404:
+                continue
             response.raise_for_status()
             payload = response.content
         with gzip.GzipFile(fileobj=io.BytesIO(payload)) as handle:
