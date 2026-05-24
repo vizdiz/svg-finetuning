@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     import anthropic
     from backend.dataset_pipeline.config import PipelineConfig
-    from backend.dataset_pipeline.scrapers.base_scraper import RawSVG
+    from backend.dataset_pipeline.processing.types import RawSVG
 
 _MODEL = "claude-sonnet-4-20250514"
 _MAX_TOKENS = 300

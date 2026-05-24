@@ -3,7 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from backend.dataset_pipeline.processing.ir_labeler import label_raw_svg_ir
-from backend.dataset_pipeline.scrapers.base_scraper import RawSVG
+from backend.dataset_pipeline.processing.types import RawSVG
 from backend.training.diagram_compiler import compile_diagram_ir
 from backend.training.diagram_ir import (
     CanvasSpec,

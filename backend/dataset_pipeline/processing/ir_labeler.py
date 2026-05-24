@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from backend.dataset_pipeline.scrapers.base_scraper import RawSVG
+from backend.dataset_pipeline.processing.types import RawSVG
 from backend.dataset_pipeline.processing.svg_ir_extractor import (
     extract_primitives,
     infer_ir,
