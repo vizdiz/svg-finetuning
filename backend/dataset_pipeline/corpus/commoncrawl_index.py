@@ -98,7 +98,8 @@ def iter_commoncrawl_index_rows(
             response.raise_for_status()
             payload = response.content
         with gzip.GzipFile(fileobj=io.BytesIO(payload)) as handle:
-            for raw_line in handle.read().decode("utf-8", errors="replace").splitlines():
+            for raw_line_bytes in handle:
+                raw_line = raw_line_bytes.decode("utf-8", errors="replace").rstrip()
                 row = _parse_cdxj_line(raw_line)
                 if row is None:
                     continue
