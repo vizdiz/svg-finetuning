@@ -3,6 +3,7 @@ from __future__ import annotations
 import gzip
 import io
 import json
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -20,6 +21,21 @@ def _make_cdx_gz(rows: list[dict]) -> bytes:
     with gzip.GzipFile(fileobj=buf, mode="wb") as f:
         f.write(lines.encode())
     return buf.getvalue()
+
+
+def _stream_mock(status_code: int, payload: bytes):
+    """Build a context-manager mock for httpx.stream() that yields payload in one chunk."""
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = status_code
+    mock_resp.raise_for_status = MagicMock()
+    mock_resp.iter_bytes = MagicMock(return_value=iter([payload]))
+
+    @contextmanager
+    def _cm(*args, **kwargs):
+        yield mock_resp
+
+    return _cm
 
 
 def test_parse_cdxj_line_json_object():
@@ -55,18 +71,16 @@ def test_svg_score_low_for_non_svg():
     assert score < 0.3
 
 
-def test_iter_commoncrawl_index_rows_https_path(tmp_path):
+def test_iter_commoncrawl_index_rows_https_path():
     svg_row = {"url": "https://example.com/fig.svg", "mime": "image/svg+xml", "status": "200",
                "filename": "crawl-data/CC-MAIN-2026-17/warc/foo.warc.gz", "offset": "100", "length": "200"}
     non_svg = {"url": "https://example.com/page.html", "mime": "text/html"}
     payload = _make_cdx_gz([svg_row, non_svg])
 
-    mock_resp = MagicMock()
-    mock_resp.status_code = 200
-    mock_resp.content = payload
-
-    with patch("backend.dataset_pipeline.corpus.commoncrawl_index.httpx") as mock_httpx:
-        mock_httpx.get.return_value = mock_resp
+    with patch(
+        "backend.dataset_pipeline.corpus.commoncrawl_index.httpx.stream",
+        _stream_mock(200, payload),
+    ):
         rows = list(
             iter_commoncrawl_index_rows(
                 crawl_id="CC-MAIN-2026-17",
@@ -82,12 +96,11 @@ def test_iter_commoncrawl_index_rows_https_path(tmp_path):
     assert rows[0]["crawl_id"] == "CC-MAIN-2026-17"
 
 
-def test_iter_commoncrawl_index_rows_skips_404(tmp_path):
-    mock_404 = MagicMock()
-    mock_404.status_code = 404
-
-    with patch("backend.dataset_pipeline.corpus.commoncrawl_index.httpx") as mock_httpx:
-        mock_httpx.get.return_value = mock_404
+def test_iter_commoncrawl_index_rows_skips_404():
+    with patch(
+        "backend.dataset_pipeline.corpus.commoncrawl_index.httpx.stream",
+        _stream_mock(404, b""),
+    ):
         rows = list(
             iter_commoncrawl_index_rows(
                 crawl_id="CC-MAIN-2026-17",
@@ -102,12 +115,10 @@ def test_iter_commoncrawl_index_rows_limit():
     svg_row = {"url": "https://example.com/a.svg", "mime": "image/svg+xml"}
     payload = _make_cdx_gz([svg_row] * 10)
 
-    mock_resp = MagicMock()
-    mock_resp.status_code = 200
-    mock_resp.content = payload
-
-    with patch("backend.dataset_pipeline.corpus.commoncrawl_index.httpx") as mock_httpx:
-        mock_httpx.get.return_value = mock_resp
+    with patch(
+        "backend.dataset_pipeline.corpus.commoncrawl_index.httpx.stream",
+        _stream_mock(200, payload),
+    ):
         rows = list(
             iter_commoncrawl_index_rows(
                 crawl_id="CC-MAIN-2026-17",
@@ -124,13 +135,11 @@ def test_fetch_commoncrawl_index_manifest_writes_files(tmp_path):
                "filename": "crawl/warc/foo.warc.gz"}
     payload = _make_cdx_gz([svg_row])
 
-    mock_resp = MagicMock()
-    mock_resp.status_code = 200
-    mock_resp.content = payload
-
     out = tmp_path / "index.jsonl"
-    with patch("backend.dataset_pipeline.corpus.commoncrawl_index.httpx") as mock_httpx:
-        mock_httpx.get.return_value = mock_resp
+    with patch(
+        "backend.dataset_pipeline.corpus.commoncrawl_index.httpx.stream",
+        _stream_mock(200, payload),
+    ):
         summary = fetch_commoncrawl_index_manifest(
             crawl_id="CC-MAIN-2026-17",
             output_path=out,

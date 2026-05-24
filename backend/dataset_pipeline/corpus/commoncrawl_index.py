@@ -4,11 +4,12 @@ from pathlib import Path
 import gzip
 import io
 import json
+import zlib
 from typing import Any, Iterable
 from urllib.parse import quote
 
 import httpx
-from backend.dataset_pipeline.corpus.schema import utc_now, write_jsonl
+from backend.dataset_pipeline.corpus.schema import utc_now
 
 
 COMMONCRAWL_BUCKET = "commoncrawl"
@@ -52,6 +53,24 @@ def _svg_score(row: dict[str, Any]) -> float:
     return min(score, 1.0)
 
 
+def _annotate_svg_row(
+    row: dict[str, Any], crawl_id: str, index_file: str
+) -> dict[str, Any] | None:
+    url = str(row.get("url") or "")
+    mime = str(row.get("mime") or row.get("content_mime_type") or "")
+    if not (url.lower().endswith(".svg") or ".svg?" in url.lower() or "svg" in mime.lower()):
+        return None
+    filename = str(row.get("filename") or row.get("warc_filename") or "")
+    if filename and not filename.startswith("s3://"):
+        row["warc_uri"] = f"s3://{COMMONCRAWL_BUCKET}/{filename}"
+    elif filename:
+        row["warc_uri"] = filename
+    row["score"] = _svg_score(row)
+    row["crawl_id"] = crawl_id
+    row["index_file"] = index_file
+    return row
+
+
 _CC_MAX_INDEX_PARTITIONS = 300
 
 
@@ -75,6 +94,37 @@ def _index_file_candidates(
     return keys
 
 
+def _iter_lines_from_s3(s3_client: Any, key: str) -> Iterable[str]:
+    resp = s3_client.get_object(Bucket=COMMONCRAWL_BUCKET, Key=key, RequestPayer="requester")
+    with gzip.GzipFile(fileobj=io.BytesIO(resp["Body"].read())) as gz:
+        for line_bytes in gz:
+            yield line_bytes.decode("utf-8", errors="replace").rstrip()
+
+
+def _iter_lines_from_https(key: str) -> Iterable[str]:
+    """Stream-decompress a CDX gzip file from data.commoncrawl.org.
+
+    Yields nothing on 404 (caller moves to next key automatically).
+    Keeps peak memory to one 64KB decompressed chunk at a time.
+    """
+    url = f"https://data.commoncrawl.org/{quote(key)}"
+    with httpx.stream("GET", url, timeout=120.0) as resp:
+        if resp.status_code == 404:
+            return  # empty generator — caller iterates over nothing and continues
+        resp.raise_for_status()
+        decompressor = zlib.decompressobj(zlib.MAX_WBITS | 16)
+        buf = b""
+        for chunk in resp.iter_bytes(chunk_size=65536):
+            buf += decompressor.decompress(chunk)
+            while b"\n" in buf:
+                nl = buf.index(b"\n")
+                yield buf[:nl].decode("utf-8", errors="replace").rstrip()
+                buf = buf[nl + 1:]
+        buf += decompressor.flush()
+        if buf.strip():
+            yield buf.decode("utf-8", errors="replace").rstrip()
+
+
 def iter_commoncrawl_index_rows(
     *,
     crawl_id: str,
@@ -87,42 +137,21 @@ def iter_commoncrawl_index_rows(
     yielded = 0
     for key in files:
         if s3_client is not None:
-            response = s3_client.get_object(
-                Bucket=COMMONCRAWL_BUCKET, Key=key, RequestPayer="requester"
-            )
-            payload = response["Body"].read()
+            lines: Iterable[str] = _iter_lines_from_s3(s3_client, key)
         else:
-            response = httpx.get(f"https://data.commoncrawl.org/{quote(key)}", timeout=120.0)
-            if response.status_code == 404:
+            lines = _iter_lines_from_https(key)
+
+        for raw_line in lines:
+            parsed = _parse_cdxj_line(raw_line)
+            if parsed is None:
                 continue
-            response.raise_for_status()
-            payload = response.content
-        with gzip.GzipFile(fileobj=io.BytesIO(payload)) as handle:
-            for raw_line_bytes in handle:
-                raw_line = raw_line_bytes.decode("utf-8", errors="replace").rstrip()
-                row = _parse_cdxj_line(raw_line)
-                if row is None:
-                    continue
-                url = str(row.get("url") or "")
-                mime = str(row.get("mime") or row.get("content_mime_type") or "")
-                if not (
-                    url.lower().endswith(".svg")
-                    or ".svg?" in url.lower()
-                    or "svg" in mime.lower()
-                ):
-                    continue
-                filename = str(row.get("filename") or row.get("warc_filename") or "")
-                if filename and not filename.startswith("s3://"):
-                    row["warc_uri"] = f"s3://{COMMONCRAWL_BUCKET}/{filename}"
-                elif filename:
-                    row["warc_uri"] = filename
-                row["score"] = _svg_score(row)
-                row["crawl_id"] = crawl_id
-                row["index_file"] = key
-                yield row
-                yielded += 1
-                if limit is not None and yielded >= limit:
-                    return
+            row = _annotate_svg_row(parsed, crawl_id, key)
+            if row is None:
+                continue
+            yield row
+            yielded += 1
+            if limit is not None and yielded >= limit:
+                return
 
 
 def fetch_commoncrawl_index_manifest(
@@ -134,20 +163,22 @@ def fetch_commoncrawl_index_manifest(
     max_files: int | None = None,
     limit: int | None = None,
 ) -> dict[str, Any]:
-    rows = list(
-        iter_commoncrawl_index_rows(
+    count = 0
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w") as fout:
+        for row in iter_commoncrawl_index_rows(
             crawl_id=crawl_id,
             s3_client=s3_client,
             index_keys=index_keys,
             max_files=max_files,
             limit=limit,
-        )
-    )
-    write_jsonl(output_path, rows)
+        ):
+            fout.write(json.dumps(row) + "\n")
+            count += 1
     summary = {
         "created_at": utc_now(),
         "crawl_id": crawl_id,
-        "record_count": len(rows),
+        "record_count": count,
         "max_files": max_files,
         "limit": limit,
         "output_path": str(output_path),
