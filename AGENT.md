@@ -256,10 +256,13 @@ to malformed shell heredoc, missing `boto3`, Python 3.9 incompatibility with
 
 ## Standard Commands
 
+Installable console entrypoints are defined in `pyproject.toml` and mirror the
+pipeline stages below as `svg-corpus-*` and `svg-train-*` commands.
+
 Write a 50K plan:
 
 ```bash
-.venv/bin/python tools/corpus/plan_corpus_build.py \
+svg-corpus-plan \
   --target-records 50000 \
   --plan-id corpus_plan_50k_v1 \
   --output pipeline_output/corpus/corpus_plan_50k_v1.json
@@ -268,7 +271,7 @@ Write a 50K plan:
 Generate synthetic strict IR:
 
 ```bash
-.venv/bin/python tools/corpus/build_synthetic_corpus.py \
+svg-corpus-build-synthetic \
   --count 10000 \
   --seed 101 \
   --output-root pipeline_output/corpus \
@@ -278,7 +281,7 @@ Generate synthetic strict IR:
 Build a Wikimedia shard plan:
 
 ```bash
-.venv/bin/python tools/corpus/build_bulk_candidates.py \
+svg-corpus-build-bulk-candidates \
   --mode wikimedia-shard-plan \
   --wikimedia-dump-path scratch/commonswiki-latest-image.sql \
   --shard-count 32 \
@@ -288,7 +291,7 @@ Build a Wikimedia shard plan:
 Run Wikimedia shard ranking locally on one machine:
 
 ```bash
-.venv/bin/python tools/corpus/run_wikimedia_shards_local.py \
+svg-corpus-run-wikimedia-shards \
   --shard-plan pipeline_output/corpus/wikimedia_shards_32.json \
   --output-dir pipeline_output/corpus/wikimedia_ranked_shards \
   --limit 7500 \
@@ -298,7 +301,7 @@ Run Wikimedia shard ranking locally on one machine:
 Merge Wikimedia shards:
 
 ```bash
-.venv/bin/python tools/corpus/merge_wikimedia_ranked_shards.py \
+svg-corpus-merge-wikimedia-shards \
   --ranked-dir pipeline_output/corpus/wikimedia_ranked_shards \
   --corpus-id wikimedia_dump_ranked_7500 \
   --output-root pipeline_output/corpus \
@@ -309,7 +312,7 @@ Merge Wikimedia shards:
 Fetch and validate ranked Wikimedia SVG originals:
 
 ```bash
-AWS_PROFILE=svg-finetuning .venv/bin/python tools/corpus/fetch_validate_wikimedia.py \
+AWS_PROFILE=svg-finetuning svg-corpus-fetch-wikimedia \
   --input-candidates s3://svg-finetuning-data-446224796301/corpus/wikimedia_dump_ranked_7500/candidates.jsonl \
   --corpus-id wikimedia_dump_ranked_7500_fetched \
   --output-root pipeline_output/corpus \
@@ -320,7 +323,7 @@ AWS_PROFILE=svg-finetuning .venv/bin/python tools/corpus/fetch_validate_wikimedi
 Create an arXiv candidate manifest from a seed list:
 
 ```bash
-.venv/bin/python tools/corpus/build_bulk_candidates.py \
+svg-corpus-build-bulk-candidates \
   --source arxiv \
   --corpus-id arxiv_source_seed_v1 \
   --arxiv-id-file pipeline_output/corpus/arxiv_ids.txt
@@ -333,7 +336,7 @@ or downloaded by orchestration.
 Download requester-pays arXiv source archives from S3:
 
 ```bash
-AWS_PROFILE=svg-finetuning .venv/bin/python tools/corpus/download_arxiv_sources.py \
+AWS_PROFILE=svg-finetuning svg-corpus-download-arxiv \
   --input-candidates pipeline_output/corpus/arxiv_source_seed_v1/candidates.jsonl \
   --destination-root pipeline_output/corpus/arxiv_sources
 ```
@@ -341,13 +344,13 @@ AWS_PROFILE=svg-finetuning .venv/bin/python tools/corpus/download_arxiv_sources.
 Build GitHub/Common Crawl manifests from exported index rows:
 
 ```bash
-.venv/bin/python tools/corpus/build_bulk_candidates.py \
+svg-corpus-build-bulk-candidates \
   --source github \
   --corpus-id github_index_v1 \
   --index-jsonl pipeline_output/corpus/github_svg_index.jsonl \
   --limit 7500
 
-.venv/bin/python tools/corpus/build_bulk_candidates.py \
+svg-corpus-build-bulk-candidates \
   --source commoncrawl \
   --corpus-id commoncrawl_index_v1 \
   --index-jsonl pipeline_output/corpus/commoncrawl_svg_index.jsonl \
@@ -357,42 +360,42 @@ Build GitHub/Common Crawl manifests from exported index rows:
 Extract/fetch, dedupe, normalize, assemble, and evaluate:
 
 ```bash
-.venv/bin/python tools/corpus/extract_arxiv_sources.py \
+svg-corpus-extract-arxiv \
   --input-candidates pipeline_output/corpus/arxiv_source_seed_v1/candidates.jsonl \
   --source-root pipeline_output/corpus/arxiv_sources \
   --corpus-id arxiv_extracted_v1
 
-.venv/bin/python tools/corpus/fetch_indexed_sources.py \
+svg-corpus-fetch-indexed \
   --input-candidates pipeline_output/corpus/github_index_v1/candidates.jsonl \
   --corpus-id github_fetched_v1
 
-.venv/bin/python tools/corpus/fetch_indexed_sources.py \
+svg-corpus-fetch-indexed \
   --input-candidates pipeline_output/corpus/commoncrawl_index_v1/candidates.jsonl \
   --corpus-id commoncrawl_fetched_v1
 
-.venv/bin/python tools/corpus/dedupe_corpus_candidates.py \
+svg-corpus-dedupe \
   --corpus-id corpus_deduped_v1 \
   --input-candidates pipeline_output/corpus/synthetic_strict_ir_10000_seed101/candidates.jsonl \
   --input-candidates pipeline_output/corpus/wikimedia_dump_ranked_7500_fetched/candidates.jsonl \
   --input-candidates pipeline_output/corpus/arxiv_extracted_v1/candidates.jsonl
 
-.venv/bin/python tools/corpus/normalize_corpus_assets.py \
+svg-corpus-normalize \
   --input-candidates pipeline_output/corpus/corpus_deduped_v1/candidates.jsonl \
   --corpus-id corpus_normalized_v1
 
-.venv/bin/python tools/corpus/assemble_corpus_dataset.py \
+svg-corpus-assemble \
   --dataset-id corpus_50k_v1 \
   --records pipeline_output/corpus/corpus_normalized_v1/training/records.jsonl
 
-.venv/bin/python tools/corpus/build_corpus_eval_report.py \
+svg-corpus-eval \
   --records pipeline_output/datasets/corpus_50k_v1/strict_ir_train/train.jsonl \
   --output pipeline_output/datasets/corpus_50k_v1/eval_report.json
 
-.venv/bin/python tools/corpus/render_corpus_thumbnails.py \
+svg-corpus-render \
   --records pipeline_output/datasets/corpus_50k_v1/raw_svg_train/train.jsonl \
   --output-dir pipeline_output/datasets/corpus_50k_v1/eval_visual/render_artifacts
 
-.venv/bin/python tools/corpus/build_caption_queue.py \
+svg-corpus-caption-queue \
   --input-candidates pipeline_output/corpus/corpus_deduped_v1/candidates.jsonl \
   --output pipeline_output/corpus/corpus_deduped_v1/model_caption_queue.jsonl
 ```
@@ -400,7 +403,7 @@ Extract/fetch, dedupe, normalize, assemble, and evaluate:
 Manual promotion after eval passes:
 
 ```bash
-AWS_PROFILE=svg-finetuning .venv/bin/python tools/corpus/promote_dataset_manifest.py \
+AWS_PROFILE=svg-finetuning svg-corpus-promote \
   --product-manifest pipeline_output/datasets/corpus_50k_v1/strict_ir_train/manifest.json \
   --eval-report pipeline_output/datasets/corpus_50k_v1/eval_report.json \
   --data-bucket svg-finetuning-data-446224796301 \

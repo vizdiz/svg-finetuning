@@ -3,9 +3,6 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-import sys
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from backend.dataset_pipeline.corpus.indexed_fetch import fetch_indexed_svg_candidates
 

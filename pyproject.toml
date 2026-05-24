@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "svg-finetuning"
+version = "0.0.0"
+description = "Corpus-first SVG/diagram fine-tuning pipeline"
+requires-python = ">=3.10"
+dependencies = [
+  "anthropic",
+  "arxiv",
+  "boto3",
+  "cairosvg",
+  "httpx",
+  "lxml",
+  "Pillow",
+  "pymupdf",
+  "python-dotenv",
+  "tqdm",
+]
+
+[project.scripts]
+svg-corpus-plan = "tools.corpus.plan_corpus_build:main"
+svg-corpus-build-synthetic = "tools.corpus.build_synthetic_corpus:main"
+svg-corpus-build-bulk-candidates = "tools.corpus.build_bulk_candidates:main"
+svg-corpus-run-wikimedia-shards = "tools.corpus.run_wikimedia_shards_local:main"
+svg-corpus-merge-wikimedia-shards = "tools.corpus.merge_wikimedia_ranked_shards:main"
+svg-corpus-fetch-wikimedia = "tools.corpus.fetch_validate_wikimedia:main"
+svg-corpus-download-arxiv = "tools.corpus.download_arxiv_sources:main"
+svg-corpus-extract-arxiv = "tools.corpus.extract_arxiv_sources:main"
+svg-corpus-fetch-indexed = "tools.corpus.fetch_indexed_sources:main"
+svg-corpus-dedupe = "tools.corpus.dedupe_corpus_candidates:main"
+svg-corpus-normalize = "tools.corpus.normalize_corpus_assets:main"
+svg-corpus-assemble = "tools.corpus.assemble_corpus_dataset:main"
+svg-corpus-eval = "tools.corpus.build_corpus_eval_report:main"
+svg-corpus-render = "tools.corpus.render_corpus_thumbnails:main"
+svg-corpus-caption-queue = "tools.corpus.build_caption_queue:main"
+svg-corpus-promote = "tools.corpus.promote_dataset_manifest:main"
+svg-train-build-canonical-manifest = "tools.training.build_canonical_manifest:main"
+svg-train-build-full-ir-fit-manifest = "tools.training.build_full_ir_fit_manifest:main"
+svg-train-build-raw-svg-manifest = "tools.training.build_raw_svg_manifest:main"
+svg-train-build-strict-ir-manifest = "tools.training.build_strict_ir_manifest:main"
+svg-train-deploy-preview = "tools.training.deploy_preview_endpoint:main"
+svg-train-start = "tools.training.start_training_job:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["backend*", "tools*"]

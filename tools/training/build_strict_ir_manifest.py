@@ -5,12 +5,9 @@ from datetime import UTC, datetime
 import hashlib
 import json
 from pathlib import Path
-import sys
 from typing import Any
 
 import boto3
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from backend.training.diagram_compiler import compile_diagram_ir
 from backend.training.diagram_ir import (
