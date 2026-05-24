@@ -31,8 +31,7 @@ def test_fetch_arxiv_ids_basic():
     mock_resp.text = _ATOM_RESPONSE
     mock_resp.raise_for_status = lambda: None
 
-    with patch("tools.corpus.fetch_arxiv_id_index.httpx") as mock_httpx:
-        mock_httpx.get.return_value = mock_resp
+    with patch("httpx.get", return_value=mock_resp):
         with patch("tools.corpus.fetch_arxiv_id_index.time") as mock_time:
             mock_time.sleep = lambda _: None
             ids = fetch_arxiv_ids(
@@ -57,8 +56,7 @@ def test_fetch_arxiv_ids_respects_limit():
     mock_resp.text = _ATOM_RESPONSE
     mock_resp.raise_for_status = lambda: None
 
-    with patch("tools.corpus.fetch_arxiv_id_index.httpx") as mock_httpx:
-        mock_httpx.get.return_value = mock_resp
+    with patch("httpx.get", return_value=mock_resp):
         with patch("tools.corpus.fetch_arxiv_id_index.time") as mock_time:
             mock_time.sleep = lambda _: None
             ids = fetch_arxiv_ids(
@@ -92,8 +90,7 @@ def test_fetch_github_svg_index_tree_mode():
     mock_client.__exit__ = MagicMock(return_value=False)
     mock_client.get.return_value = mock_resp
 
-    with patch("tools.corpus.fetch_github_svg_index.httpx") as mock_httpx:
-        mock_httpx.Client.return_value = mock_client
+    with patch("httpx.Client", return_value=mock_client):
         with patch("tools.corpus.fetch_github_svg_index.time") as mock_time:
             mock_time.sleep = lambda _: None
             # Only first repo is needed, limit=2
@@ -117,8 +114,7 @@ def test_fetch_github_svg_index_dedupes_by_sha():
     mock_client.__exit__ = MagicMock(return_value=False)
     mock_client.get.return_value = mock_resp
 
-    with patch("tools.corpus.fetch_github_svg_index.httpx") as mock_httpx:
-        mock_httpx.Client.return_value = mock_client
+    with patch("httpx.Client", return_value=mock_client):
         with patch("tools.corpus.fetch_github_svg_index.time") as mock_time:
             mock_time.sleep = lambda _: None
             # Both repos return same SHA — should dedupe
