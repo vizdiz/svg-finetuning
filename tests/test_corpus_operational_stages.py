@@ -118,6 +118,7 @@ def test_commoncrawl_index_fetcher_extracts_svg_records(tmp_path):
         crawl_id="CC-MAIN-2026-17",
         output_path=tmp_path / "commoncrawl.jsonl",
         s3_client=s3,
+        index_keys=[index_key],
         max_files=1,
         limit=10,
     )

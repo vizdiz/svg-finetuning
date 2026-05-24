@@ -64,10 +64,11 @@ def iter_commoncrawl_index_rows(
     *,
     crawl_id: str,
     s3_client: Any,
+    index_keys: list[str] | None = None,
     max_files: int | None = None,
     limit: int | None = None,
 ) -> Iterable[dict[str, Any]]:
-    files = _index_file_candidates(s3_client, crawl_id, max_files=max_files)
+    files = index_keys or _index_file_candidates(s3_client, crawl_id, max_files=max_files)
     yielded = 0
     for key in files:
         response = s3_client.get_object(Bucket=COMMONCRAWL_BUCKET, Key=key)
@@ -103,13 +104,22 @@ def fetch_commoncrawl_index_manifest(
     crawl_id: str,
     output_path: Path,
     s3_client: Any | None = None,
+    index_keys: list[str] | None = None,
     max_files: int | None = None,
     limit: int | None = None,
 ) -> dict[str, Any]:
     import boto3
 
     s3 = s3_client or boto3.client("s3")
-    rows = list(iter_commoncrawl_index_rows(crawl_id=crawl_id, s3_client=s3, max_files=max_files, limit=limit))
+    rows = list(
+        iter_commoncrawl_index_rows(
+            crawl_id=crawl_id,
+            s3_client=s3,
+            index_keys=index_keys,
+            max_files=max_files,
+            limit=limit,
+        )
+    )
     write_jsonl(output_path, rows)
     summary = {
         "created_at": utc_now(),
