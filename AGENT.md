@@ -152,31 +152,31 @@ Implemented:
 - `backend/dataset_pipeline/corpus/promotion.py`: explicit manual promotion of
   a passed product manifest to `train/dataset_manifest.json`.
 - `backend/dataset_pipeline/corpus/workers.py`: shared source-worker contract.
-- `scratch/plan_corpus_build.py`: writes the 50K plan.
-- `scratch/build_synthetic_corpus.py`: writes synthetic strict-IR corpus.
-- `scratch/build_bulk_candidates.py`: writes Wikimedia/arXiv/GitHub/Common
+- `tools/corpus/plan_corpus_build.py`: writes the 50K plan.
+- `tools/corpus/build_synthetic_corpus.py`: writes synthetic strict-IR corpus.
+- `tools/corpus/build_bulk_candidates.py`: writes Wikimedia/arXiv/GitHub/Common
   Crawl candidate manifests and Wikimedia shard jobs.
-- `scratch/run_wikimedia_shards_local.py`: runs Wikimedia rank shards on one
+- `tools/corpus/run_wikimedia_shards_local.py`: runs Wikimedia rank shards on one
   machine with worker parallelism.
-- `scratch/merge_wikimedia_ranked_shards.py`: merges ranked shard outputs.
-- `scratch/fetch_validate_wikimedia.py`: fetches selected Wikimedia SVG
+- `tools/corpus/merge_wikimedia_ranked_shards.py`: merges ranked shard outputs.
+- `tools/corpus/fetch_validate_wikimedia.py`: fetches selected Wikimedia SVG
   originals from a candidate manifest and writes validation state/assets.
-- `scratch/extract_arxiv_sources.py`: extracts SVG assets from arXiv source
+- `tools/corpus/extract_arxiv_sources.py`: extracts SVG assets from arXiv source
   tarballs for an arXiv candidate manifest.
-- `scratch/fetch_indexed_sources.py`: fetches selected GitHub/Common Crawl
+- `tools/corpus/fetch_indexed_sources.py`: fetches selected GitHub/Common Crawl
   indexed SVG candidates.
-- `scratch/download_arxiv_sources.py`: downloads requester-pays arXiv source
+- `tools/corpus/download_arxiv_sources.py`: downloads requester-pays arXiv source
   archives from S3 for an arXiv candidate manifest.
-- `scratch/dedupe_corpus_candidates.py`: dedupes one or more candidate
+- `tools/corpus/dedupe_corpus_candidates.py`: dedupes one or more candidate
   manifests.
-- `scratch/normalize_corpus_assets.py`: normalizes fetched assets into training
+- `tools/corpus/normalize_corpus_assets.py`: normalizes fetched assets into training
   records.
-- `scratch/assemble_corpus_dataset.py`: assembles dataset products.
-- `scratch/build_corpus_eval_report.py`: writes an eval gate report.
-- `scratch/render_corpus_thumbnails.py`: writes render thumbnails and render
+- `tools/corpus/assemble_corpus_dataset.py`: assembles dataset products.
+- `tools/corpus/build_corpus_eval_report.py`: writes an eval gate report.
+- `tools/corpus/render_corpus_thumbnails.py`: writes render thumbnails and render
   hash metadata for visual eval.
-- `scratch/build_caption_queue.py`: writes a JSONL model-caption queue.
-- `scratch/promote_dataset_manifest.py`: requires `--approved` plus a passed
+- `tools/corpus/build_caption_queue.py`: writes a JSONL model-caption queue.
+- `tools/corpus/promote_dataset_manifest.py`: requires `--approved` plus a passed
   eval report before writing the training manifest.
 
 Not implemented:
@@ -241,11 +241,11 @@ Important SSM command history:
   - Created a 32-shard line-aligned plan over
     `scratch/commonswiki-latest-image.sql`.
   - Dump size: `159,526,682,899` bytes.
-  - Ran `scratch/run_wikimedia_shards_local.py` with `--limit 7500` and
+  - Ran `tools/corpus/run_wikimedia_shards_local.py` with `--limit 7500` and
     `--parallelism 8`.
 
 - `2026-05-24 02:24 EDT`, `merge-wikimedia-ranked-shards`
-  - Ran `scratch/merge_wikimedia_ranked_shards.py`.
+  - Ran `tools/corpus/merge_wikimedia_ranked_shards.py`.
   - Merged `240,000` shard-local ranked candidates into the global top `7,500`.
   - Uploaded to
     `s3://svg-finetuning-data-446224796301/corpus/wikimedia_dump_ranked_7500/`.
@@ -259,7 +259,7 @@ to malformed shell heredoc, missing `boto3`, Python 3.9 incompatibility with
 Write a 50K plan:
 
 ```bash
-.venv/bin/python scratch/plan_corpus_build.py \
+.venv/bin/python tools/corpus/plan_corpus_build.py \
   --target-records 50000 \
   --plan-id corpus_plan_50k_v1 \
   --output pipeline_output/corpus/corpus_plan_50k_v1.json
@@ -268,7 +268,7 @@ Write a 50K plan:
 Generate synthetic strict IR:
 
 ```bash
-.venv/bin/python scratch/build_synthetic_corpus.py \
+.venv/bin/python tools/corpus/build_synthetic_corpus.py \
   --count 10000 \
   --seed 101 \
   --output-root pipeline_output/corpus \
@@ -278,7 +278,7 @@ Generate synthetic strict IR:
 Build a Wikimedia shard plan:
 
 ```bash
-.venv/bin/python scratch/build_bulk_candidates.py \
+.venv/bin/python tools/corpus/build_bulk_candidates.py \
   --mode wikimedia-shard-plan \
   --wikimedia-dump-path scratch/commonswiki-latest-image.sql \
   --shard-count 32 \
@@ -288,7 +288,7 @@ Build a Wikimedia shard plan:
 Run Wikimedia shard ranking locally on one machine:
 
 ```bash
-.venv/bin/python scratch/run_wikimedia_shards_local.py \
+.venv/bin/python tools/corpus/run_wikimedia_shards_local.py \
   --shard-plan pipeline_output/corpus/wikimedia_shards_32.json \
   --output-dir pipeline_output/corpus/wikimedia_ranked_shards \
   --limit 7500 \
@@ -298,7 +298,7 @@ Run Wikimedia shard ranking locally on one machine:
 Merge Wikimedia shards:
 
 ```bash
-.venv/bin/python scratch/merge_wikimedia_ranked_shards.py \
+.venv/bin/python tools/corpus/merge_wikimedia_ranked_shards.py \
   --ranked-dir pipeline_output/corpus/wikimedia_ranked_shards \
   --corpus-id wikimedia_dump_ranked_7500 \
   --output-root pipeline_output/corpus \
@@ -309,7 +309,7 @@ Merge Wikimedia shards:
 Fetch and validate ranked Wikimedia SVG originals:
 
 ```bash
-AWS_PROFILE=svg-finetuning .venv/bin/python scratch/fetch_validate_wikimedia.py \
+AWS_PROFILE=svg-finetuning .venv/bin/python tools/corpus/fetch_validate_wikimedia.py \
   --input-candidates s3://svg-finetuning-data-446224796301/corpus/wikimedia_dump_ranked_7500/candidates.jsonl \
   --corpus-id wikimedia_dump_ranked_7500_fetched \
   --output-root pipeline_output/corpus \
@@ -320,20 +320,20 @@ AWS_PROFILE=svg-finetuning .venv/bin/python scratch/fetch_validate_wikimedia.py 
 Create an arXiv candidate manifest from a seed list:
 
 ```bash
-.venv/bin/python scratch/build_bulk_candidates.py \
+.venv/bin/python tools/corpus/build_bulk_candidates.py \
   --source arxiv \
   --corpus-id arxiv_source_seed_v1 \
   --arxiv-id-file pipeline_output/corpus/arxiv_ids.txt
 ```
 
 This arXiv command only creates a candidate manifest. Use
-`scratch/extract_arxiv_sources.py` after source tarballs are available locally
+`tools/corpus/extract_arxiv_sources.py` after source tarballs are available locally
 or downloaded by orchestration.
 
 Download requester-pays arXiv source archives from S3:
 
 ```bash
-AWS_PROFILE=svg-finetuning .venv/bin/python scratch/download_arxiv_sources.py \
+AWS_PROFILE=svg-finetuning .venv/bin/python tools/corpus/download_arxiv_sources.py \
   --input-candidates pipeline_output/corpus/arxiv_source_seed_v1/candidates.jsonl \
   --destination-root pipeline_output/corpus/arxiv_sources
 ```
@@ -341,13 +341,13 @@ AWS_PROFILE=svg-finetuning .venv/bin/python scratch/download_arxiv_sources.py \
 Build GitHub/Common Crawl manifests from exported index rows:
 
 ```bash
-.venv/bin/python scratch/build_bulk_candidates.py \
+.venv/bin/python tools/corpus/build_bulk_candidates.py \
   --source github \
   --corpus-id github_index_v1 \
   --index-jsonl pipeline_output/corpus/github_svg_index.jsonl \
   --limit 7500
 
-.venv/bin/python scratch/build_bulk_candidates.py \
+.venv/bin/python tools/corpus/build_bulk_candidates.py \
   --source commoncrawl \
   --corpus-id commoncrawl_index_v1 \
   --index-jsonl pipeline_output/corpus/commoncrawl_svg_index.jsonl \
@@ -357,42 +357,42 @@ Build GitHub/Common Crawl manifests from exported index rows:
 Extract/fetch, dedupe, normalize, assemble, and evaluate:
 
 ```bash
-.venv/bin/python scratch/extract_arxiv_sources.py \
+.venv/bin/python tools/corpus/extract_arxiv_sources.py \
   --input-candidates pipeline_output/corpus/arxiv_source_seed_v1/candidates.jsonl \
   --source-root pipeline_output/corpus/arxiv_sources \
   --corpus-id arxiv_extracted_v1
 
-.venv/bin/python scratch/fetch_indexed_sources.py \
+.venv/bin/python tools/corpus/fetch_indexed_sources.py \
   --input-candidates pipeline_output/corpus/github_index_v1/candidates.jsonl \
   --corpus-id github_fetched_v1
 
-.venv/bin/python scratch/fetch_indexed_sources.py \
+.venv/bin/python tools/corpus/fetch_indexed_sources.py \
   --input-candidates pipeline_output/corpus/commoncrawl_index_v1/candidates.jsonl \
   --corpus-id commoncrawl_fetched_v1
 
-.venv/bin/python scratch/dedupe_corpus_candidates.py \
+.venv/bin/python tools/corpus/dedupe_corpus_candidates.py \
   --corpus-id corpus_deduped_v1 \
   --input-candidates pipeline_output/corpus/synthetic_strict_ir_10000_seed101/candidates.jsonl \
   --input-candidates pipeline_output/corpus/wikimedia_dump_ranked_7500_fetched/candidates.jsonl \
   --input-candidates pipeline_output/corpus/arxiv_extracted_v1/candidates.jsonl
 
-.venv/bin/python scratch/normalize_corpus_assets.py \
+.venv/bin/python tools/corpus/normalize_corpus_assets.py \
   --input-candidates pipeline_output/corpus/corpus_deduped_v1/candidates.jsonl \
   --corpus-id corpus_normalized_v1
 
-.venv/bin/python scratch/assemble_corpus_dataset.py \
+.venv/bin/python tools/corpus/assemble_corpus_dataset.py \
   --dataset-id corpus_50k_v1 \
   --records pipeline_output/corpus/corpus_normalized_v1/training/records.jsonl
 
-.venv/bin/python scratch/build_corpus_eval_report.py \
+.venv/bin/python tools/corpus/build_corpus_eval_report.py \
   --records pipeline_output/datasets/corpus_50k_v1/strict_ir_train/train.jsonl \
   --output pipeline_output/datasets/corpus_50k_v1/eval_report.json
 
-.venv/bin/python scratch/render_corpus_thumbnails.py \
+.venv/bin/python tools/corpus/render_corpus_thumbnails.py \
   --records pipeline_output/datasets/corpus_50k_v1/raw_svg_train/train.jsonl \
   --output-dir pipeline_output/datasets/corpus_50k_v1/eval_visual/render_artifacts
 
-.venv/bin/python scratch/build_caption_queue.py \
+.venv/bin/python tools/corpus/build_caption_queue.py \
   --input-candidates pipeline_output/corpus/corpus_deduped_v1/candidates.jsonl \
   --output pipeline_output/corpus/corpus_deduped_v1/model_caption_queue.jsonl
 ```
@@ -400,7 +400,7 @@ Extract/fetch, dedupe, normalize, assemble, and evaluate:
 Manual promotion after eval passes:
 
 ```bash
-AWS_PROFILE=svg-finetuning .venv/bin/python scratch/promote_dataset_manifest.py \
+AWS_PROFILE=svg-finetuning .venv/bin/python tools/corpus/promote_dataset_manifest.py \
   --product-manifest pipeline_output/datasets/corpus_50k_v1/strict_ir_train/manifest.json \
   --eval-report pipeline_output/datasets/corpus_50k_v1/eval_report.json \
   --data-bucket svg-finetuning-data-446224796301 \
@@ -411,7 +411,7 @@ AWS_PROFILE=svg-finetuning .venv/bin/python scratch/promote_dataset_manifest.py 
 ## What Is Left
 
 1. Finish Wikimedia selective fetch at scale:
-   - run `scratch/fetch_validate_wikimedia.py` in batches or on EC2
+   - run `tools/corpus/fetch_validate_wikimedia.py` in batches or on EC2
    - write fetched assets under a new corpus prefix
    - inspect reject/failure reasons
    - keep request delay conservative to avoid Wikimedia rate limits
