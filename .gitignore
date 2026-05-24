@@ -17,3 +17,5 @@ infra/terraform/terraform.tfstate.backup
 pipeline_output/
 .cache/
 scratch/
+.agent.md
+AGENT.md
