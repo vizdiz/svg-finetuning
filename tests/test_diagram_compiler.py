@@ -108,6 +108,23 @@ def test_compile_document_emits_edge_geometry():
     assert edge.attrib["stroke"] == "#1A1A18"
 
 
+def test_compile_document_places_edge_label_between_nodes():
+    doc = _document()
+    doc.edges[0].label = "access_token"
+    svg = compile_diagram_ir(doc)
+    root = _parse(svg)
+
+    edge_label = root.find(".//svg:g[@id='edge-client-api']/svg:text", NS)
+    client_rect = root.find(".//svg:g[@id='node-client']/svg:rect", NS)
+    api_rect = root.find(".//svg:g[@id='node-api']/svg:rect", NS)
+
+    assert edge_label is not None and client_rect is not None and api_rect is not None
+    label_x = float(edge_label.attrib["x"])
+    client_right = float(client_rect.attrib["x"]) + float(client_rect.attrib["width"])
+    api_left = float(api_rect.attrib["x"])
+    assert client_right < label_x < api_left
+
+
 def test_vertical_layout_changes_node_axis():
     svg = compile_diagram_ir(_document(direction="vertical"))
     root = _parse(svg)
@@ -118,4 +135,3 @@ def test_vertical_layout_changes_node_axis():
 
     assert client_rect is not None and api_rect is not None and service_rect is not None
     assert float(client_rect.attrib["y"]) < float(api_rect.attrib["y"]) < float(service_rect.attrib["y"])
-

@@ -126,6 +126,10 @@ def _layout_boxes(
     y = padding
 
     if layout.direction == "horizontal":
+        if len(nodes) > 1:
+            total_width = sum(measured[node.id][0] for node in nodes)
+            available = max(1.0, canvas.width - padding * 2)
+            spacing = min(spacing, max(24.0, (available - total_width) / (len(nodes) - 1)))
         row_height = 0.0
         for node in nodes:
             width, height = measured[node.id]
@@ -143,8 +147,42 @@ def _layout_boxes(
             col_width = max(col_width, width)
         return boxes
 
-    # Freeform: preserve order but wrap if the row gets too wide.
+    # Freeform canonical IR may carry explicit source geometry. Use it when
+    # present so simplification can preserve the original diagram layout.
     max_width = max(1.0, canvas.width - canvas.padding * 2)
+    has_explicit_boxes = any(isinstance(node.metadata.get("bbox"), (list, tuple)) for node in nodes)
+    if has_explicit_boxes:
+        fallback_x = padding
+        fallback_y = padding
+        row_height = 0.0
+        for node in nodes:
+            bbox = node.metadata.get("bbox")
+            if (
+                isinstance(bbox, (list, tuple))
+                and len(bbox) == 4
+                and all(isinstance(value, (int, float)) for value in bbox)
+                and bbox[2] > 0
+                and bbox[3] > 0
+            ):
+                boxes[node.id] = NodeBox(
+                    x=float(bbox[0]),
+                    y=float(bbox[1]),
+                    width=float(bbox[2]),
+                    height=float(bbox[3]),
+                )
+                continue
+
+            width, height = measured[node.id]
+            if fallback_x != padding and fallback_x + width > padding + max_width:
+                fallback_x = padding
+                fallback_y += row_height + spacing
+                row_height = 0.0
+            boxes[node.id] = NodeBox(x=fallback_x, y=fallback_y, width=width, height=height)
+            fallback_x += width + spacing
+            row_height = max(row_height, height)
+        return boxes
+
+    # Freeform fallback: preserve order but wrap if the row gets too wide.
     cursor_x = padding
     cursor_y = padding
     row_height = 0.0
@@ -253,6 +291,17 @@ def _fmt_number(value: float | int) -> str:
         return str(int(value))
     text = f"{float(value):.2f}"
     return text.rstrip("0").rstrip(".")
+
+
+def _edge_label_position(points: list[tuple[float, float]]) -> tuple[float, float]:
+    if not points:
+        return 0.0, 0.0
+    if len(points) == 1:
+        return points[0]
+    segment_index = max(0, (len(points) - 2) // 2)
+    sx, sy = points[segment_index]
+    tx, ty = points[segment_index + 1]
+    return (sx + tx) / 2, (sy + ty) / 2 - 14
 
 
 def compile_diagram_ir(document: DiagramIRDocument) -> str:
@@ -372,10 +421,9 @@ def compile_diagram_ir(document: DiagramIRDocument) -> str:
             )
         )
         if edge.label:
-            mid_index = len(points) // 2
-            lx, ly = points[mid_index]
+            lx, ly = _edge_label_position(points)
             parts.append(
-                f'<text x="{lx:.1f}" y="{ly - 6:.1f}" text-anchor="middle" '
+                f'<text x="{lx:.1f}" y="{ly:.1f}" text-anchor="middle" '
                 f'font-family="{_DEFAULT_FONT_FAMILY}" font-size="11" fill="{text_color}">'
                 f"{_escape_label(edge.label)}</text>"
             )
